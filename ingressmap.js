@@ -85,7 +85,7 @@ function moveToCurrentPosition() {
 	// https://developer.mozilla.org/ja/docs/Web/API/Geolocation.getCurrentPosition
 	navigator.geolocation.getCurrentPosition(function(pos) {
 		googleMap.setCenter({lat: pos.coords.latitude, lng: pos.coords.longitude });
-		googleMap.setZoom(14);
+		googleMap.setZoom(15);
 	}, showError, { enableHighAccuracy: true });
 }
 
