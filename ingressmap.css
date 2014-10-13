@@ -1,0 +1,75 @@
+/**
+ * ingressmap.css
+ *
+ * Copyright (C) 2014 Sabara <sabara dot ingress at gmail dot com>
+ * 
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ */
+
+html {
+	height: 100%;
+}
+
+body {
+  	font: 14px/1.2 Verdana, Arial, Helvetica, sans-serif;
+	height: 100%;
+	margin: 0;
+	padding: 0;
+}
+
+#map_canvas {
+	height: 100%;
+}
+
+#panel {
+	position: absolute;
+    top: 5px;
+    left: 5px;
+    margin-left: 0px;
+    z-index: 5;
+    /* background-color: transparent; */
+    background-color: #fff;
+    padding: 5px;
+    border: 1px solid #999;
+}
+
+table {
+  border: 1px solid #000000;
+  border-collapse:collapse;
+}
+
+thead {
+  background-color: #e6e6e6;
+}
+
+tbody {
+  background-color: #ffffff;
+}
+
+tfoot {
+  background-color: #eeeeee;
+}
+
+tr {
+  border: 1px solid #111111;
+}
+
+tr:hover {
+  background: #eeeeee;
+}
+
+td {
+  border: 1px solid #111111;
+}
