@@ -26,7 +26,7 @@ var scopes = 'https://www.googleapis.com/auth/gmail.readonly';
 var userId = 'me';
 var maxResults = 100;
 var q = 'subject:"Ingress Damage Report: Entities attacked by" from:ingress-support@google.com';
-var maxLoop = 20;
+var maxLoop = 10;
 
 
 ///
@@ -71,6 +71,7 @@ $(document).ready(function() {
 	moveToCurrentPosition();
 
 	showAllPortals();
+   	showStatus();
 });
 
 $(window).load(function() {
@@ -95,20 +96,21 @@ function handleAuthResult(authResult) {
         gmailList('', maxLoop, [], function(ids) {
         	showMessage('Loading mail ID from Gmail... (' + (maxLoop * maxResults - ids.length) + ')');
         }, function(ids) {
-        	var newIds = ids.filter(function(id) { return !isExistReport(id); });
+        	var newIds = ids.filter(function(id) { return !isExistReport(id); }).reverse(); // sort by time (older first)
         	if (!newIds || 0 == newIds.length) {
         	   	showStatus();
         	} else {
         		gmailGet(newIds, handleGmailResult, function(ids, response) {
         			clearAllPortals();
         			showAllPortals();
+        		   	showStatus();
         		});
         	}
         });
     } else {
     	showMessage('Please click here to authorize Gmail API (OAuth 2.0)');
     	$('#content').on('click', function(event) {
-    		gapi.auth.authorize({ client_id: clientId, scope: scopes, immediate: false}, handleAuthResult);
+    		gapi.auth.authorize({ client_id: clientId, scope: scopes, immediate: false }, handleAuthResult);
     	});
     }
 }
@@ -117,10 +119,16 @@ function handleGmailResult(ids, response) {
 	showMessage('Parsing mail... (' + ids.length + ')');
 	ids.forEach(function(id) {
 		try {
-			var report = parseMail(id, response.result[id].result['payload']['headers'], urlsafe_b64_to_utf8(response.result[id].result['payload']['parts'][1]['body']['data']));
-			saveReport(report);
+			var header = response.result[id].result['payload']['headers'];
+			var body = response.result[id].result['payload']['parts'][1]['body']['data'];
+			var report = parseMail(id, header, urlsafe_b64_to_utf8(body));
+			if (null == report) {
+				showError('handleGmailResult: failed to parse mail: id == ' + id);
+			} else {
+				saveReport(report);
+			}
 		} catch (e) {
-			showError('handleGmailResult: id == ' + id + ', e == ' + e);
+			showError('handleGmailResult: e == ' + e + ', id == ' + id + ', response.result[id].result == ' + response.result[id].result);
 		}
 	});
 }
@@ -173,7 +181,6 @@ function showAllPortals() {
    	var portals = analyzeReports(reports);
    	showMessage('Showing portals... (' + portals.length + ')');
    	portals.forEach(showPortal);
-   	showStatus();
    	// printLocalStorage();
 }
 
@@ -234,34 +241,119 @@ function reportsLength() {
 	return localStorage.length;
 }
 
-function saveReport(report) {
-	try {
-		if (report && 'gmailId' in report) {
-			localStorage.setItem(report['gmailId'], JSON.stringify(report));
-			return true;
-		} else {
-			return false;
-		}
-	} catch (e) {
-		showMessage('saveReport: ' + e);
-		return false;
+function isValidReport(report) {
+	return report && ('gmailId' in report) && ('string' === typeof report['gmailId']) && 0 < report['gmailId'].length; 
+}
+
+var REPORT_FIELDS = [
+    'gmailId',
+    'localDateString', 'localYear', 'localMonth', 'localDate', 'localHours', 'localMinutes', 'localSeconds', 'localDay', 'localDayString',
+    'agentName', 'agentFaction', 'agentLevel',
+    'portalName', 'intelUrl', 'portalImageUrl',
+    'latitude', 'longitude',
+    'ownerName', 'ownerFaction',
+    'enemyName', 'enemyFaction'
+];
+
+function compressReport(report) {
+	if (REPORT_FIELDS.every(function(field) { return field in report; })) {
+		var compressedReport =  REPORT_FIELDS.map(function(field) { return report[field]; });
+		return compressedReport;
+	} else {
+		showError('compressReport: invalid value: report == ' + report);
+		return null;
 	}
 }
 
+function uncompressReport(compressedReport) {
+	if (REPORT_FIELDS.length == compressedReport.length) {
+		var report = {};
+		for (var i = 0; i < compressedReport.length; i++) {
+			report[REPORT_FIELDS[i]] = compressedReport[i];
+		}
+		return report;
+	} else {
+		showError('uncompressReport: invalid value : compressedReport == ' + compressedReport);
+		return null;
+	}
+}
+
+
+function saveReport(report) {
+	if (!isValidReport(report)) {
+		showError('saveReport: invalid value: report == ' + report);
+		return false;
+	} else {
+		//var dummy = ''; // dummy big data
+		//for (var i = 0; i < 500 * 1024; i++) {
+		//	dummy += 'x';
+		//}
+		//report['dummy'] = dummy;
+
+		//var jsonString = JSON.stringify(report);
+		var compressedReport = compressReport(report);
+		var jsonString = JSON.stringify(compressedReport);
+		try {
+			localStorage.setItem(report['gmailId'], jsonString);
+			return true;
+		} catch (e) { // QUOTA_EXCEEDED_ERR
+			// http://chrisberkhout.com/blog/localstorage-errors/
+			showError('saveReport: ' + e + ', gmailId == ' + report['gmailId'] + ', report == ' + report);
+			showMessage('Removing old reports... (' + maxResults + ')');
+			removeOldReports(maxResults);
+			try {
+				localStorage.setItem(report['gmailId'], jsonString);
+				return true;
+			} catch (e) {
+				showError('saveReport retrying setItem failed: ' + e + ', report == ' + report);
+			}
+			return false;
+		}
+	}
+}
+
+function removeOldReports(count) {
+	count = count < localStorage.length ? count : localStorage.length;
+	var keys = range(0, count).map(function(i) { return localStorage.key(i); });
+	keys.forEach(function(k) {
+		var v = localStorage.getItem(k);
+		// console.log('removeOldReports: ' + [k, v ? v.length : v]);
+		localStorage.removeItem(k);
+	});
+}
+
 function loadReport(gmailId) {
-	return JSON.parse(localStorage.getItem(gmailId));
+	var jsonString = localStorage.getItem(gmailId);
+	if (jsonString && ('string' === typeof jsonString)) {
+		try {
+			var compressedReport = JSON.parse(jsonString);
+			return uncompressReport(compressedReport);
+		} catch (e) {
+			showError('loadReport: falied to parse JSON: gmailId == ' + gmailId + ', jsonString == ' + jsonString);
+			return null;
+		}
+	} else {
+		showError('loadReport: invalid value: gmailId == ' + gmailId + ', jsonString == ' + jsonString);
+		return null;
+	}
 }
 
 function isExistReport(gmailId) {
-	var value = localStorage.getItem(gmailId);
-	return value && ('gmailId' in JSON.parse(value));
+	var jsonString = localStorage.getItem(gmailId);
+	return jsonString && ('string' === typeof jsonString); // FIXME: need more restrict check?
 }
 
 function loadAllReports() {
 	var reports = [];
-	// for (var i = 0; i < reportLength(); i++){
-	for (var i = reportsLength() - 1; i >= 0; i--){
-		reports.push(loadReport(localStorage.key(i)));
+	for (var i = 0; i < reportsLength(); i++){
+	// for (var i = reportsLength() - 1; i >= 0; i--){
+		var id = localStorage.key(i);
+		var report = loadReport(id);
+		if (null != report) {
+			reports.push(report);
+		} else {
+			localStorage.removeItem(id);
+		}
 	}
 	return reports;
 }
@@ -271,10 +363,11 @@ function clearReports() {
 }
 
 function printLocalStorage() {
-	// for (var i = 0; i < localStorage.length; i++){
-	for (var i = localStorage.length - 1; i >= 0; i--){
+	for (var i = 0; i < localStorage.length; i++){
+	// for (var i = localStorage.length - 1; i >= 0; i--){
 		var k = localStorage.key(i);
 		var v = localStorage.getItem(k);
+		// console.log([i, k, v ? v.length : v]);
 		console.log([i, k, v]);
 	}
 }
@@ -318,11 +411,15 @@ var intel_pat = /^http.*&pll=([\d\+.]+?),([\d\+.]+?)&z=\d+$/;
 function parseMail(id, header, body) {
 	var head = parseHeader(header);
 	var body = parseBody(body);
-	var local = new Date(head['Date']);
-	// var result = { gmailId: id, utcDateString: head['Date'], from: head['From'], to: head['To'] , localDateString: local.toString(), localYear: local.getFullYear(), localMonth: local.getMonth() + 1, localDate: local.getDate(), localHours: local.getHours(), localMinutes: local.getMinutes(), localSeconds: local.getSeconds(), localDay: local.getDay(), localDayString: toWeekDay(local.getDay()) };
-	var result = { gmailId: id, localDateString: local.toString(), localYear: local.getFullYear(), localMonth: local.getMonth() + 1, localDate: local.getDate(), localHours: local.getHours(), localMinutes: local.getMinutes(), localSeconds: local.getSeconds(), localDay: local.getDay(), localDayString: toWeekDay(local.getDay()) };
-	result = $.extend(result, body);
-	return result;
+	if (null != head && null != body) {
+		var local = new Date(head['Date']);
+		// var result = { gmailId: id, utcDateString: head['Date'], from: head['From'], to: head['To'] , localDateString: local.toString(), localYear: local.getFullYear(), localMonth: local.getMonth() + 1, localDate: local.getDate(), localHours: local.getHours(), localMinutes: local.getMinutes(), localSeconds: local.getSeconds(), localDay: local.getDay(), localDayString: toWeekDay(local.getDay()) };
+		var result = { gmailId: id, localDateString: local.toString(), localYear: local.getFullYear(), localMonth: local.getMonth() + 1, localDate: local.getDate(), localHours: local.getHours(), localMinutes: local.getMinutes(), localSeconds: local.getSeconds(), localDay: local.getDay(), localDayString: toWeekDay(local.getDay()) };
+		result = $.extend(result, body);
+		return result;
+	} else {
+		return null;
+	}
 }
 
 function toWeekDay(day) {
@@ -350,12 +447,12 @@ function parseHeader(headers) {
 			}
 		});
 	});
-	return result;
+	return names.every(function(name) { return name in result }) ? result : null;
 }
 
 function parseName(name) {
 	var m = name_pat.exec(name);
-	return m ? [m[2], colorToFaction(m[1])] : [name, ''];
+	return null != m ? [m[2], colorToFaction(m[1])] : [name, ''];
 }
 
 function parseDamageLine(lines) {
@@ -366,10 +463,10 @@ function parseDamageLine(lines) {
 	for (var i in l) {
 		var line = l[i]; 
 		m = dmg_line_pat.exec(line)
-	    if (m) {
-	      targets.push(m[1]);
-	      enemies.push(parseName(m[2]));
-	      dates.push(m[3]);
+		if (null != m) {
+			targets.push(m[1]);
+			enemies.push(parseName(m[2]));
+			dates.push(m[3]);
 	    } else {
 	    	// unknown format
 	    }
@@ -382,16 +479,20 @@ function parseBody(body) {
 	var result = {};
 
 	var m = ag_pat.exec(body);
+	if (null == m) return null;
 	var agent = parseName(m[1]);
 	result['agentName'] = agent[0]; result['agentFaction'] = agent[1]; result['agentLevel'] = m[3]; // result['agentFactionName'] = m[2]; 
 
 	var m = dmgrep_pat.exec(body);
+	if (null == m) return null;
 	result['portalName'] = m[1]; result['intelUrl'] = m[2]; result['portalImageUrl'] = m[4]; // result['portalAddress'] = m[3]; result['portalMapUrl'] = m[5];
 
 	var m = intel_pat.exec(result['intelUrl']);
+	if (null == m) return null;
 	result['latitude'] = m[1]; result['longitude'] = m[2];
 
 	var m = dmg_pat.exec(body);
+	if (null == m) return null;
 	var owner = parseName(m[4]);
 	result['ownerName'] = owner[0]; result['ownerFaction'] = owner[1]; // result['status'] = m[2]; result['health'] = m[3];
 	var damageHtml = m[1]; 
@@ -430,7 +531,7 @@ function shuffle(kvArray) {
 }
 
 function isEqualKey(a, b) {
-	return a == b ? true : ('function' == typeof a.toString && 'function' == typeof b.toString && a.toString() == b.toString());
+	return a == b ? true : ('function' === typeof a.toString && 'function' === typeof b.toString && a.toString() == b.toString());
 }
 
 function freq(seq) {
@@ -489,4 +590,12 @@ function decodeHTMLEntities(str) {
 	// http://stackoverflow.com/questions/5796718/html-entity-decode
 	// FIXME: textarea is XSS safe or not?
 	return $('<textarea />').html(str).text();
+}
+
+function range(start, end) {
+	var result = [];
+	for (var i = start; i < end; i++) {
+		result.push(i);
+	}
+	return result;
 }
