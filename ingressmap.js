@@ -26,7 +26,7 @@ var scopes = 'https://www.googleapis.com/auth/gmail.readonly';
 var userId = 'me';
 var maxResults = 100;
 var q = 'subject:"Ingress Damage Report: Entities attacked by" from:ingress-support@google.com';
-var maxLoop = 10;
+var maxLoop = 100;
 
 
 ///
@@ -78,7 +78,7 @@ $(window).load(function() {
     gapi.client.load('gmail', 'v1').then(function(response) { // sometimes this line got error in $(document).ready 
     	gapi.auth.authorize({ client_id: clientId, scope: scopes, immediate: true}, handleAuthResult);
     }, function(response) {
-    	showError(response.result.error.message);
+		console.error({ func: 'gapi.client.load.then', error: response.result.error.message });
     }, this);
 });
 
@@ -87,7 +87,9 @@ function moveToCurrentPosition() {
 	navigator.geolocation.getCurrentPosition(function(pos) {
 		googleMap.setCenter({lat: pos.coords.latitude, lng: pos.coords.longitude });
 		googleMap.setZoom(15);
-	}, showError, { enableHighAccuracy: true });
+	}, function(error) {
+		console.error({ func: 'navigator.geolocation.getCurrentPosition', error: error });
+	}, { enableHighAccuracy: true });
 }
 
 function handleAuthResult(authResult) {
@@ -119,16 +121,17 @@ function handleGmailResult(ids, response) {
 	showMessage('Parsing mail... (' + ids.length + ')');
 	ids.forEach(function(id) {
 		try {
+			// FIXME: error handling if headers missing
 			var header = response.result[id].result['payload']['headers'];
 			var body = response.result[id].result['payload']['parts'][1]['body']['data'];
 			var report = parseMail(id, header, urlsafe_b64_to_utf8(body));
 			if (null == report) {
-				showError('handleGmailResult: failed to parse mail: id == ' + id);
+				console.error({ func: 'handleGmailResult', error: 'failed to parse mail', id: id, result: response.result[id].result });
 			} else {
 				saveReport(report);
 			}
 		} catch (e) {
-			showError('handleGmailResult: e == ' + e + ', id == ' + id + ', response.result[id].result == ' + response.result[id].result);
+			console.error({ func: 'handleGmailResult', error: e, id: id, result: response.result[id].result });
 		}
 	});
 }
@@ -147,7 +150,7 @@ function gmailList(pageToken, loop, ids, progressFunc, doneFunc) {
 		progressFunc(ids);
 		gmailList(response.result.nextPageToken, loop - 1, ids, progressFunc, doneFunc); // recursive!!!
  	}, function(response) {
- 		showError(response.result.error.message);
+ 		console.error({ func: 'gmailList', error: response.result.error.message });
  	}, this);
 }
 
@@ -167,7 +170,7 @@ function gmailGet(ids, progressFunc, doneFunc) {
 		progressFunc(head, response)
 		gmailGet(rest, progressFunc, doneFunc); // recursive!!!
 	}, function(response) {
-		showError('gmailGet: ' + response.result.error.message);
+		console.error({ func: 'gmailGet', error: response.result.error.message });
 	}, this);
 }
 
@@ -256,11 +259,11 @@ var REPORT_FIELDS = [
 ];
 
 function compressReport(report) {
-	if (REPORT_FIELDS.every(function(field) { return field in report; })) {
+	if (null != report && REPORT_FIELDS.every(function(field) { return field in report; })) {
 		var compressedReport =  REPORT_FIELDS.map(function(field) { return report[field]; });
 		return compressedReport;
 	} else {
-		showError('compressReport: invalid value: report == ' + report);
+		console.error({ func: 'compressReport', error: 'invalid value', report: report });
 		return null;
 	}
 }
@@ -273,7 +276,7 @@ function uncompressReport(compressedReport) {
 		}
 		return report;
 	} else {
-		showError('uncompressReport: invalid value : compressedReport == ' + compressedReport);
+		console.error({ func: 'uncompressReport', error: 'invalid value', compressedReport: compressedReport });
 		return null;
 	}
 }
@@ -281,7 +284,7 @@ function uncompressReport(compressedReport) {
 
 function saveReport(report) {
 	if (!isValidReport(report)) {
-		showError('saveReport: invalid value: report == ' + report);
+		console.error({ func: 'saveReport', error: 'invalid value', report: report });
 		return false;
 	} else {
 		//var dummy = ''; // dummy big data
@@ -298,14 +301,14 @@ function saveReport(report) {
 			return true;
 		} catch (e) { // QUOTA_EXCEEDED_ERR
 			// http://chrisberkhout.com/blog/localstorage-errors/
-			showError('saveReport: ' + e + ', gmailId == ' + report['gmailId'] + ', report == ' + report);
+			console.error({ func: 'saveReport', error: 'failed to setItem (first)', e: e, gmailId: report['gmailId'], report: report });
 			showMessage('Removing old reports... (' + maxResults + ')');
 			removeOldReports(maxResults);
 			try {
 				localStorage.setItem(report['gmailId'], jsonString);
 				return true;
 			} catch (e) {
-				showError('saveReport retrying setItem failed: ' + e + ', report == ' + report);
+				console.error({ func: 'saveReport', error: 'failed to setItem (retry)', e: e, gmailId: report['gmailId'], report: report });
 			}
 			return false;
 		}
@@ -317,7 +320,7 @@ function removeOldReports(count) {
 	var keys = range(0, count).map(function(i) { return localStorage.key(i); });
 	keys.forEach(function(k) {
 		var v = localStorage.getItem(k);
-		// console.log('removeOldReports: ' + [k, v ? v.length : v]);
+		// console.log({ func: 'removeOldReports', k: k, v: (v ? v.length : v) });
 		localStorage.removeItem(k);
 	});
 }
@@ -329,11 +332,11 @@ function loadReport(gmailId) {
 			var compressedReport = JSON.parse(jsonString);
 			return uncompressReport(compressedReport);
 		} catch (e) {
-			showError('loadReport: falied to parse JSON: gmailId == ' + gmailId + ', jsonString == ' + jsonString);
+			console.error({ func: 'loadReport', error: 'falied to parse JSON', gmailId: gmailId, jsonString: jsonString });
 			return null;
 		}
 	} else {
-		showError('loadReport: invalid value: gmailId == ' + gmailId + ', jsonString == ' + jsonString);
+		console.error({ func: 'loadReport', error: 'invalid value', gmailId: gmailId, jsonString: jsonString });
 		return null;
 	}
 }
@@ -390,12 +393,6 @@ function showMessage(mesg) {
 	console.log(mesg);
 	$('#content').html(mesg + '<br />');
 }
-
-function showError(mesg) {
-	console.log('ERROR: ' + mesg);
-	$('#content').html('ERROR: ' + mesg + '<br />');
-}
-
 
 ///
 /// mail parser
@@ -557,7 +554,7 @@ function disablePOIInfoWindow() {
 	google.maps.InfoWindow.prototype.set = function(key, val) {
 		if ('map' === key) {
 			if (!this.get('noSupress')) {
-				console.log('This InfoWindow is supressed. To enable it, set "noSupress" option to true');
+				console.warn('This InfoWindow is supressed. To enable it, set "noSupress" option to true');
 				return;
 			}
 		}
