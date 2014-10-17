@@ -45,31 +45,52 @@ body {
     border: 1px solid #999;
 }
 
+.portal_info {
+	float: left;
+	margin: 5px 5px 5px 5px;
+}
+
+.portal_img {
+	max-width: 80px;
+}
+
 table {
-  border: 1px solid #000000;
-  border-collapse:collapse;
+  	border: 1px solid #000000;
+  	border-collapse:collapse;
 }
 
 thead {
-  background-color: #e6e6e6;
+  	background-color: #e6e6e6;
+}
+
+thead td {
+ 	text-align: center;
 }
 
 tbody {
-  background-color: #ffffff;
+	background-color: #ffffff;
+}
+
+tbody {
+	background-color: #ffffff;
 }
 
 tfoot {
-  background-color: #eeeeee;
+  	background-color: #eeeeee;
 }
 
 tr {
-  border: 1px solid #111111;
+  	border: 1px solid #111111;
 }
 
 tr:hover {
-  background: #eeeeee;
+  	background: #eeeeee;
 }
 
 td {
-  border: 1px solid #111111;
+  	border: 1px solid #111111;
+}
+
+.td_number {
+ 	text-align: right;
 }

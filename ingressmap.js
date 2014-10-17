@@ -35,6 +35,7 @@ var maxLoop = 100;
 var googleMap = null;
 var markers = [];
 var infoWindows = [];
+var upcCount = 0;
 var openedInfoWindow = null;
 
 
@@ -87,8 +88,8 @@ function moveToCurrentPosition() {
 	navigator.geolocation.getCurrentPosition(function(pos) {
 		googleMap.setCenter({lat: pos.coords.latitude, lng: pos.coords.longitude });
 		googleMap.setZoom(15);
-	}, function(error) {
-		console.error({ func: 'navigator.geolocation.getCurrentPosition', error: error });
+	}, function(e) {
+		console.error({ func: 'moveToCurrentPosition', error: 'failed to move to curernt position', e: e });
 	}, { enableHighAccuracy: true });
 }
 
@@ -99,14 +100,14 @@ function handleAuthResult(authResult) {
         	showMessage('Loading mail ID from Gmail... (' + (maxLoop * maxResults - ids.length) + ')');
         }, function(ids) {
         	var newIds = ids.filter(function(id) { return !isExistReport(id); }).reverse(); // sort by time (older first)
-        	if (!newIds || 0 == newIds.length) {
-        	   	showStatus();
-        	} else {
+        	if (newIds && 0 != newIds.length) {
         		gmailGet(newIds, handleGmailResult, function(ids, response) {
         			clearAllPortals();
         			showAllPortals();
         		   	showStatus();
         		});
+        	} else {
+        	   	showStatus();
         	}
         });
     } else {
@@ -120,18 +121,23 @@ function handleAuthResult(authResult) {
 function handleGmailResult(ids, response) {
 	showMessage('Parsing mail... (' + ids.length + ')');
 	ids.forEach(function(id) {
+		var result = response.result[id].result;
 		try {
 			// FIXME: error handling if headers missing
-			var header = response.result[id].result['payload']['headers'];
-			var body = response.result[id].result['payload']['parts'][1]['body']['data'];
-			var report = parseMail(id, header, urlsafe_b64_to_utf8(body));
-			if (null == report) {
-				console.error({ func: 'handleGmailResult', error: 'failed to parse mail', id: id, result: response.result[id].result });
+			if (result && !result.error) {
+				var header = response.result[id].result['payload']['headers'];
+				var body = response.result[id].result['payload']['parts'][1]['body']['data'];
+				var report = parseMail(id, header, urlsafe_b64_to_utf8(body));
+				if (null == report) {
+					console.error({ func: 'handleGmailResult', error: 'failed to parse mail', id: id, result: response.result[id].result });
+				} else {
+					saveReport(report);
+				}
 			} else {
-				saveReport(report);
+				console.error({ func: 'handleGmailResult', error: 'failed to get message from Gmail', id: id, result: result });
 			}
 		} catch (e) {
-			console.error({ func: 'handleGmailResult', error: e, id: id, result: response.result[id].result });
+			console.error({ func: 'handleGmailResult', error: e, id: id, result: result });
 		}
 	});
 }
@@ -144,9 +150,11 @@ function gmailList(pageToken, loop, ids, progressFunc, doneFunc) {
 		return doneFunc(ids);;
 	}
  	gapi.client.gmail.users.messages.list({'userId': userId, 'maxResults': maxResults, 'q': q, 'pageToken': pageToken}).then(function(response) {
- 		response.result.messages.forEach(function(mesg) {
- 			ids.push(mesg['id']);
- 		});
+ 		if ('messages' in response.result && 0 != response.result.messages.length) {
+	 		response.result.messages.forEach(function(mesg) {
+	 			ids.push(mesg['id']);
+	 		});
+ 		}
 		progressFunc(ids);
 		gmailList(response.result.nextPageToken, loop - 1, ids, progressFunc, doneFunc); // recursive!!!
  	}, function(response) {
@@ -188,31 +196,37 @@ function showAllPortals() {
 }
 
 function showStatus() {
-   	showMessage('Ingress Damage Reports Map (Reports: ' + reportsLength() + ', Portals: ' + markers.length + ')');
+   	showMessage('Ingress Damage Reports Map ,Reports: ' + reportsLength() + ', Portals: ' + markers.length + ' (<span style="color: red">UPC: ' + upcCount + '</span>)');
 }
 
-
 function showPortal(portal) {
-	var name = portal[0][0]
-	var lat = portal[0][1];
-	var lng = portal[0][2];
+	var portalName = portal[0][0]
+	var latitude = portal[0][1];
+	var longitude = portal[0][2];
 	var enemies = portal[1][0];
-	var img = portal[1][1];
-	var intel = portal[1][2];
-	var owners = portal[1][3];
-	var agent = portal[1][4];
-	var faction = portal[1][5];
-	var isUPC = owners.some(function(owner) { return agent == owner[0]; });
-	var color = isUPC ? 'red' : ('RES' == faction ? '#3679B9' : '#428F43');
-	var titleText = decodeHTMLEntities(name) + (isUPC ? ' (UPC)' : '');
-	var enemyTable = '<p><table><thead><tr><td>Agent</td><td>Reports</a></thead><tbody><tr><td>' + enemies.map(function(item) { return item.join('</td><td>'); }).join('</td></tr><tr><td>') + '</td></tr></tbody></table></p>';
-	var content = $('<div />').append($('<h3 />').html(name)).append($('<a />').attr('href', intel).attr('target', '_blank').append($('<img />').attr({ 'src': img, 'style': 'max-height: 120px; max-width: 120px' }))).append($('<div />').html(enemyTable)).append($('<div />').html(isUPC ? 'UPC' : ''));
+	var localHours = portal[1][1];
+	var localDays = portal[1][2];
+	var portalImageUrl = portal[1][3];
+	var owners = portal[1][4];
+	var agentName = portal[1][5];
+	var agentFaction = portal[1][6];
+
+	var intelUrl = 'https://www.ingress.com/intel?ll=' + latitude + ',' + longitude + '&pll=' + latitude + ',' + longitude + '&z=19';
+	var isUPC = owners.some(function(owner) { return agentName == owner[0]; });
+	var color = isUPC ? 'red' : ('RES' == agentFaction ? '#3679B9' : '#428F43');
+	var titleText = decodeHTMLEntities(portalName) + (isUPC ? ' (UPC)' : '');
+	var enemyTable = '<table><thead><tr><td>Agent</td><td>#</td></tr></thead><tbody><tr><td>' + enemies.map(function(item) { return item[0] + '</td><td class="td_number">' + item[1]; }).join('</td></tr><tr><td>') + '</td></tr></tbody></table>';
+	var localHoursTable = '<table><thead><tr><td>Hour</td><td>#</td></tr></thead><tbody><tr><td class="td_number">' + localHours.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return item.join('</td><td class="td_number">'); }).join('</td></tr><tr><td class="td_number">') + '</td></tr></tbody></table>';
+	var localDaysTable = '<table><thead><tr><td>Day</td><td>#</td></tr></thead><tbody><tr><td>' + localDays.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return toWeekDay(item[0]) + '</td><td class="td_number">' + item[1]; }).join('</td></tr><tr><td>') + '</td></tr></tbody></table>';
+	var content = $('<div />').append($('<h3 />').html(portalName + (isUPC ? ' (<span style="color: red">UPC</span>)' : ''))).append($('<a />').addClass('portal_info').attr('href', intelUrl).attr('target', '_blank').append($('<img />').attr({ 'src': portalImageUrl }).addClass('portal_img'))).append($('<div />').addClass('portal_info').html(enemyTable)).append($('<div />').addClass('portal_info').html(localHoursTable)).append($('<div />').addClass('portal_info').html(localDaysTable));
+
 	var iconOpt = { path: google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: color, fillOpacity: 0.4, strokeColor: color, strokeWeight: 2 };
 	// var iconOpt = 'http://commondatastorage.googleapis.com/ingress.com/img/map_icons/marker_images/hum_8res.png';
-	var marker = new google.maps.Marker({ position: new google.maps.LatLng(lat, lng), map: googleMap, title: titleText, icon: iconOpt });
+	var marker = new google.maps.Marker({ position: new google.maps.LatLng(latitude, longitude), map: googleMap, title: titleText, icon: iconOpt });
 	markers.push(marker); // global!!!
-	var infoWindow = new google.maps.InfoWindow({ content: content.html(), noSupress: true, maxWidth: 160 });
+	var infoWindow = new google.maps.InfoWindow({ content: content.html(), noSupress: true, maxWidth: 640 });
 	infoWindows.push(infoWindow); // global!!!
+	if (isUPC) upcCount++; // global!!!
 	// https://developers.google.com/maps/documentation/javascript/examples/event-closure?hl=ja
 	// http://stackoverflow.com/questions/8909652/adding-click-event-listeners-in-loop
 	google.maps.event.addListener(marker, 'click', function(_marker, _infoWindow) { // closure
@@ -235,6 +249,7 @@ function clearAllPortals() {
 		marker.setMap(null);
 	});
 	markers = []; // global!!!
+	upcCount = 0; // global!!!
 }
 
 ///
@@ -250,9 +265,9 @@ function isValidReport(report) {
 
 var REPORT_FIELDS = [
     'gmailId',
-    'localDateString', 'localYear', 'localMonth', 'localDate', 'localHours', 'localMinutes', 'localSeconds', 'localDay', 'localDayString',
+    'time', 'localYear', 'localMonth', 'localDate', 'localHours', 'localMinutes', 'localSeconds', 'localDay', 'localDayString',
     'agentName', 'agentFaction', 'agentLevel',
-    'portalName', 'intelUrl', 'portalImageUrl',
+    'portalName', 'portalImageUrl',
     'latitude', 'longitude',
     'ownerName', 'ownerFaction',
     'enemyName', 'enemyFaction'
@@ -377,15 +392,16 @@ function printLocalStorage() {
 
 function analyzeReports(reports) {
 	return mapReduce(reports, function(report) {
-		return [[report['portalName'], report['latitude'], report['longitude']], [report['enemyName'], report['portalImageUrl'], report['intelUrl'], report['ownerName'], report['agentName'], report['agentFaction']]];
+		return [[report['portalName'], report['latitude'], report['longitude']], [report['enemyName'], report['localHours'], report['localDay'], report['portalImageUrl'], report['ownerName'], report['agentName'], report['agentFaction']]];
 	}, function(k, v) {
-		var enemies = v.map(function(item) { return item[0]; });
-		var imgs = v.map(function(item) { return item[1]; });
-		var intels = v.map(function(item) { return item[2]; });
-		var owners = v.map(function(item) { return item[3]; });
-		var agents = v.map(function(item) { return item[4]; });
-		var factions = v.map(function(item) { return item[5]; });
-		return [k, [sortByValue(freq(enemies)), sortByValue(freq(imgs))[0][0], sortByValue(freq(intels))[0][0], sortByValue(freq(owners)), sortByValue(freq(agents))[0][0], sortByValue(freq(factions))[0][0]]];
+		var enemyNames = v.map(function(item) { return item[0]; });
+		var localHours = v.map(function(item) { return item[1]; });
+		var localDays = v.map(function(item) { return item[2]; });
+		var portalImageUrls = v.map(function(item) { return item[3]; });
+		var ownerNames = v.map(function(item) { return item[4]; });
+		var agentNames = v.map(function(item) { return item[5]; });
+		var agentFactions = v.map(function(item) { return item[6]; });
+		return [k, [sortByValue(freq(enemyNames)), sortByValue(freq(localHours)), sortByValue(freq(localDays)), sortByValue(freq(portalImageUrls))[0][0], sortByValue(freq(ownerNames)), sortByValue(freq(agentNames))[0][0], sortByValue(freq(agentFactions))[0][0]]];
 	});
 }
 
@@ -411,7 +427,7 @@ function parseMail(id, header, body) {
 	if (null != head && null != body) {
 		var local = new Date(head['Date']);
 		// var result = { gmailId: id, utcDateString: head['Date'], from: head['From'], to: head['To'] , localDateString: local.toString(), localYear: local.getFullYear(), localMonth: local.getMonth() + 1, localDate: local.getDate(), localHours: local.getHours(), localMinutes: local.getMinutes(), localSeconds: local.getSeconds(), localDay: local.getDay(), localDayString: toWeekDay(local.getDay()) };
-		var result = { gmailId: id, localDateString: local.toString(), localYear: local.getFullYear(), localMonth: local.getMonth() + 1, localDate: local.getDate(), localHours: local.getHours(), localMinutes: local.getMinutes(), localSeconds: local.getSeconds(), localDay: local.getDay(), localDayString: toWeekDay(local.getDay()) };
+		var result = { gmailId: id, time: local.getTime(), localYear: local.getFullYear(), localMonth: local.getMonth() + 1, localDate: local.getDate(), localHours: local.getHours(), localMinutes: local.getMinutes(), localSeconds: local.getSeconds(), localDay: local.getDay(), localDayString: toWeekDay(local.getDay()) };
 		result = $.extend(result, body);
 		return result;
 	} else {
@@ -482,9 +498,9 @@ function parseBody(body) {
 
 	var m = dmgrep_pat.exec(body);
 	if (null == m) return null;
-	result['portalName'] = m[1]; result['intelUrl'] = m[2]; result['portalImageUrl'] = m[4]; // result['portalAddress'] = m[3]; result['portalMapUrl'] = m[5];
+	result['portalName'] = m[1]; result['portalImageUrl'] = m[4]; // result['portalAddress'] = m[3]; result['portalMapUrl'] = m[5];
 
-	var m = intel_pat.exec(result['intelUrl']);
+	var m = intel_pat.exec(m[2]);
 	if (null == m) return null;
 	result['latitude'] = m[1]; result['longitude'] = m[2];
 
