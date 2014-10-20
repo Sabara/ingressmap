@@ -507,13 +507,13 @@ function parseBody(body) {
 			var portal = $('td > div:eq(1) > a[href^="https://www.ingress.com/intel?ll="]', tr);
 			if (0 != portal.length) {
 				if (parserDebug) { console.log([i, 'portal', portal.length, $(tr).html()]); }
-				r['portalAddress'] = portal.html();
-				var intel_pat = /^http.*&pll=([\d\+.]+?),([\d\+.]+?)&z=\d+$/;
+				// r['portalAddress'] = portal.html();
+				var intel_pat = /^http.*&pll=(.+?),(.+?)&z=\d+$/;
 				var m = intel_pat.exec(portal.attr('href'));
 				if (null != m) {
 					r['latitude'] = m[1]; r['longitude'] = m[2];
 				} else {
-					// unknown format
+					console.error({ func: 'parseBodyByDOM', error: 'Unknown format (intel)', href: portal.attr('href'), i: i, tr: $(tr).html() });
 				}
 				r['portalName'] = $('td > div:eq(0)', tr).html();
 				return;
@@ -559,7 +559,7 @@ function parseBody(body) {
 			if (0 != damage.length) {
 				if (parserDebug) { console.log([i, 'damage', damage.length, $(tr).html()]); }
 
-				// DAMAGE:<br>1 Resonator destroyed by <span style="color: #428F43;">shmz</span> at 02:22 hrs GMT<br>No remaining Resonators detected on this Portal.
+				// DAMAGE:<br>1 Resonator destroyed by <span style="color: #428F43;">enemyNameX</span> at 02:22 hrs GMT<br>No remaining Resonators detected on this Portal.
 				var dmg_pat = /^(.*) destroyed by (.*) at (.*)$/;
 				var targets = []; var enemies = []; var dates = [];
 				damage.html().split('<br>').forEach(function(line){
@@ -570,7 +570,10 @@ function parseBody(body) {
 						enemies.push([enemySpan.html(), spanToFaction(enemySpan)]);
 						dates.push(m[3]);
 					} else {
-						// unknown format
+						// TODO: handle other format
+						// DAMAGE:
+						// No remaining Resonators detected on this Portal.
+						// ...
 					}
 				});
 				r['enemyName'] = enemies[0][0]; // FIXME: first only??
@@ -585,7 +588,7 @@ function parseBody(body) {
 					r['ownerName'] = ownerSpan.html() ? ownerSpan.html() : ownerSpan.text();
 					r['ownerFaction'] = spanToFaction(ownerSpan);
 				} else {
-					// unknown format
+					console.error({ func: 'parseBodyByDOM', error: 'Unknown format (status)', status: status.html(), i: i, tr: $(tr).html() });
 				}
 
 				result.push(r);
@@ -596,7 +599,7 @@ function parseBody(body) {
 				return;
 			}
 
-			console.error({ func: 'parseBodyByDOM', error: 'Unknown format', i: i, tr: $(tr).html() });
+			console.error({ func: 'parseBodyByDOM', error: 'Unknown format (tr)', i: i, tr: $(tr).html() });
 		}
 	});
 
