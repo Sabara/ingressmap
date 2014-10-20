@@ -119,7 +119,6 @@ function handleAuthResult(authResult) {
 }
 
 function handleGmailResult(ids, response) {
-	showMessage('Parsing mail... (' + ids.length + ')');
 	ids.forEach(function(id) {
 		var result = response.result[id].result;
 		try {
@@ -473,7 +472,7 @@ function parseBody(body) {
 
 	// http://stackoverflow.com/questions/15150264/jquery-how-to-stop-auto-load-imges-when-parsehtml
 	// replace <img src="..."> to <img no_load_src="..."> to stop auto load image 
-	body = body.replace(/<img [^>]*src=['"]([^'"]+)[^>]*>/gi, function (match, capture) { return '<img no_load_src="' + capture + '" />';})
+	body = body.replace(/<img [^>]*src=['"]([^'"]+)[^>]*>/gi, function(match, capture) { return '<img no_load_src="' + capture + '" />';})
 	var div = $.parseHTML(body);
 	// console.log(div);
 
@@ -483,7 +482,7 @@ function parseBody(body) {
 	var trs = $('table[width="750px"] > tbody > tr:eq(1) > td > table[width="700px"] > tbody > tr', div);
 	trs.each(function(i, tr) {
 		if (0 == i) { // first line must be agent info
-			// <td valign="top" style="font-size: 13px; padding-bottom: 1.5em;"><span style="font-weight: normal; margin-right: .3em; font-size: 10px; text-transform: uppercase;">Agent Name:</span><span style="color: #3679B9;">Sabara55</span><br><span style="font-weight: normal; margin-right: .3em; font-size: 10px; text-transform: uppercase;">Faction:</span><span style="color: #3679B9;">Resistance</span><br><span style="font-weight: normal; margin-right: .3em; font-size: 10px; text-transform: uppercase;">Current Level:</span><span>L9</span></td>
+			// <td valign="top" style="font-size: 13px; padding-bottom: 1.5em;"><span style="font-weight: normal; margin-right: .3em; font-size: 10px; text-transform: uppercase;">Agent Name:</span><span style="color: #3679B9;">agentNameX</span><br><span style="font-weight: normal; margin-right: .3em; font-size: 10px; text-transform: uppercase;">Faction:</span><span style="color: #3679B9;">Resistance</span><br><span style="font-weight: normal; margin-right: .3em; font-size: 10px; text-transform: uppercase;">Current Level:</span><span>L8</span></td>
 			var agentSpan = $('td > span:contains("Agent Name:") + span', tr);
 			if (parserDebug) { console.log([i, 'agent', agentSpan.length, $(tr).html()]); }
 			agentName = agentSpan.html();
@@ -504,7 +503,7 @@ function parseBody(body) {
 				return;
 			}
 
-			// <td style="padding-top: 1em; padding-bottom: 1em;"><div>つくし野殿山市民の森</div><div><a target="_blank" href="https://www.ingress.com/intel?ll=35.530946,139.480833&amp;pll=35.530946,139.480833&amp;z=19" style="color: #D73B8E; border: none; text-decoration: none;">1 Chome-17-92 Tsukushino, Machida, Tokyo, Japan</a></div></td>
+			// <td style="padding-top: 1em; padding-bottom: 1em;"><div>portalNameX</div><div><a target="_blank" href="https://www.ingress.com/intel?ll=35.000000,139.000000&amp;pll=35.000000,139.000000&amp;z=19" style="color: #D73B8E; border: none; text-decoration: none;">portalAddressX</a></div></td>
 			var portal = $('td > div:eq(1) > a[href^="https://www.ingress.com/intel?ll="]', tr);
 			if (0 != portal.length) {
 				if (parserDebug) { console.log([i, 'portal', portal.length, $(tr).html()]); }
@@ -520,7 +519,7 @@ function parseBody(body) {
 				return;
 			}
 
-			// <td style="overflow: hidden;"><div style="width:1000px;"><div style="width: auto; height: 160px; float: left; display: inline-block;"><img src="http://lh4.ggpht.com/wX3cnaddhavarwpyH-MV4D1yaEt_5R6cx9747przwbaOW5L0gs8KWYl1anzmVLU_n91IYsB-Md2uoBM9NhLw" alt="Portal - つくし野殿山市民の森" height="160" style="display: block;border: 0;height: auto;line-height: 100%;outline: none;text-decoration: none;"></div><div style="width: auto; height: 160px; float: left; display: inline-block; overflow:hidden;"><img src="http://maps.googleapis.com/maps/api/staticmap?center=35.530946,139.480933&amp;zoom=19&amp;size=700x160&amp;sensor=false&amp;style=visibility:on%7Csaturation:-50%7Cinvert_lightness:true%7Chue:0x131c1c&amp;style=feature:water%7Cvisibility:on%7Chue:0x005eff%7Cinvert_lightness:true&amp;style=feature:poi%7Cvisibility:off&amp;style=feature:transit%7Cvisibility:off&amp;markers=icon:http://commondatastorage.googleapis.com/ingress.com/img/map_icons/marker_images/neutral_icon.png%7Cshadow:false%7C35.530946,139.480833" alt="Map" width="700" height="160" style="display: block;border: 0;height: auto;line-height: 100%;outline: none;text-decoration: none;"></div><div style="clear:both;"></div></div><table cellpadding="0" cellspacing="0" border="0"></table></td>
+			// <td style="overflow: hidden;"><div style="width:1000px;"><div style="width: auto; height: 160px; float: left; display: inline-block;"><img src="http://example.com/portalimage" alt="Portal - portalNameX" height="160" style="display: block;border: 0;height: auto;line-height: 100%;outline: none;text-decoration: none;"></div><div style="width: auto; height: 160px; float: left; display: inline-block; overflow:hidden;"><img src="http://example.com/mapimage" alt="Map" width="700" height="160" style="display: block;border: 0;height: auto;line-height: 100%;outline: none;text-decoration: none;"></div><div style="clear:both;"></div></div><table cellpadding="0" cellspacing="0" border="0"></table></td>
 			var image = $('td > div[style="width:1000px;"] > div[style*="height: 160px"] > img', tr);
 			if (2 == image.length) {
 				if (parserDebug) { console.log([i, 'image', image.length, $(tr).html()]); }
@@ -530,7 +529,7 @@ function parseBody(body) {
 				return;
 			}
 
-			// <td style="overflow: hidden;"><div style="width:1000px;"><div style="width: auto; height: 100px; float: left; display: inline-block;"><img src="http://lh5.ggpht.com/kZkV9TBIhSKQlxNV5K_Pa1MeRn0d-_EJ67wwD7BbPCR8DdKyL2o5469tWDydi3brjA-JlBsAN1afolaN6_qvW4hiQ03Ssor0kO6X_F5pK4qbzTrL" alt="Portal - Saginuma Station's Clock" height="100" style="display: block;border: 0;height: auto;line-height: 100%;outline: none;text-decoration: none;"></div><div style="width: auto; height: 100px; float: left; display: inline-block; overflow:hidden;"><img src="http://maps.googleapis.com/maps/api/staticmap?center=35.579217,139.573467&amp;zoom=19&amp;size=650x100&amp;sensor=false&amp;style=visibility:on%7Csaturation:-50%7Cinvert_lightness:true%7Chue:0x131c1c&amp;style=feature:water%7Cvisibility:on%7Chue:0x005eff%7Cinvert_lightness:true&amp;style=feature:poi%7Cvisibility:off&amp;style=feature:transit%7Cvisibility:off&amp;markers=icon:http://commondatastorage.googleapis.com/ingress.com/img/map_icons/marker_images/hum_2res.png%7Cshadow:false%7C35.579217,139.573367" alt="Map" width="650" height="100" style="display: block;border: 0;height: auto;line-height: 100%;outline: none;text-decoration: none;"></div><div style="clear:both;"></div></div><table cellpadding="0" cellspacing="0" border="0" width="700px"><tbody><tr><td width="50px" style="line-height: 0; vertical-align: top;"><img src="http://commondatastorage.googleapis.com/ingressemail/damagereport/line_3.png" width="50" height="22"></td></tr></tbody></table></td>
+			// <td style="overflow: hidden;"><div style="width:1000px;"><div style="width: auto; height: 100px; float: left; display: inline-block;"><img src="http://example.com/portalimage" alt="Portal - portalNameX" height="100" style="display: block;border: 0;height: auto;line-height: 100%;outline: none;text-decoration: none;"></div><div style="width: auto; height: 100px; float: left; display: inline-block; overflow:hidden;"><img src="http://example.com/mapimage" alt="Map" width="650" height="100" style="display: block;border: 0;height: auto;line-height: 100%;outline: none;text-decoration: none;"></div><div style="clear:both;"></div></div><table cellpadding="0" cellspacing="0" border="0" width="700px"><tbody><tr><td width="50px" style="line-height: 0; vertical-align: top;"><img src="http://commondatastorage.googleapis.com/ingressemail/damagereport/line_3.png" width="50" height="22"></td></tr></tbody></table></td>
 			var linkedImage = $('td > div[style="width:1000px;"] > div[style*="height: 100px"] > img', tr);
 			if (2 == linkedImage.length) {
 				// TODO: do something
@@ -547,7 +546,7 @@ function parseBody(body) {
 				return;
 			}
 
-			// <td><table cellpadding="0" cellspacing="0" border="0" width="700px"><tbody><tr><td width="50px" style="line-height: 0;"><img src="http://commondatastorage.googleapis.com/ingressemail/damagereport/line_1.png" width="50" height="26"></td><td>Fountain: <a target="_blank" href="https://www.ingress.com/intel?ll=35.613760,139.626983&amp;pll=35.613760,139.626983&amp;z=19" style="color: #D73B8E; border: none; text-decoration: none;">Tamagawa Dori, 3 Chome Tamagawa, Setagaya, Tokyo 158-0094, Japan</a></td></tr></tbody></table></td>
+			// <td><table cellpadding="0" cellspacing="0" border="0" width="700px"><tbody><tr><td width="50px" style="line-height: 0;"><img src="http://commondatastorage.googleapis.com/ingressemail/damagereport/line_1.png" width="50" height="26"></td><td>portalNameX: <a target="_blank" href="https://www.ingress.com/intel?ll=35.000000,139.000000&amp;pll=35.000000,139.000000&amp;z=19" style="color: #D73B8E; border: none; text-decoration: none;">portalAddressX</a></td></tr></tbody></table></td>
 			var linkedPortal = $('td > table[width="700px"] > tbody > tr > td[width="50px"] + td > a[href^="https://www.ingress.com/intel?ll="]', tr);
 			if (0 != linkedPortal.length) {
 				// TODO: do something
@@ -555,7 +554,7 @@ function parseBody(body) {
 				return;
 			}
 
-			// <td style="padding: 1em 0;"><table cellpadding="0" cellspacing="0" border="0" width="700px"><tbody><tr><td width="400px"><div>DAMAGE:<br>1 Resonator destroyed by <span style="color: #428F43;">shmz</span> at 02:22 hrs GMT<br>No remaining Resonators detected on this Portal.</div></td><td><div>STATUS:<br>Level 1<br>Health: 0%<br>Owner: [uncaptured]</div></td></tr></tbody></table></td>
+			// <td style="padding: 1em 0;"><table cellpadding="0" cellspacing="0" border="0" width="700px"><tbody><tr><td width="400px"><div>DAMAGE:<br>1 Resonator destroyed by <span style="color: #428F43;">enemyNameX</span> at 02:22 hrs GMT<br>No remaining Resonators detected on this Portal.</div></td><td><div>STATUS:<br>Level 1<br>Health: 0%<br>Owner: [uncaptured]</div></td></tr></tbody></table></td>
 			var damage = $('td > table[width="700px"] > tbody > tr > td[width="400px"] > div:contains("DAMAGE:")', tr);
 			if (0 != damage.length) {
 				if (parserDebug) { console.log([i, 'damage', damage.length, $(tr).html()]); }
@@ -658,7 +657,7 @@ function disablePOIInfoWindow() {
 	google.maps.InfoWindow.prototype.set = function(key, val) {
 		if ('map' === key) {
 			if (!this.get('noSupress')) {
-				console.warn('This InfoWindow is supressed. To enable it, set "noSupress" option to true');
+				// console.warn('This InfoWindow is supressed. To enable it, set "noSupress" option to true');
 				return;
 			}
 		}
