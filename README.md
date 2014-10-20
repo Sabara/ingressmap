@@ -35,89 +35,105 @@ ingressmap.js の関数 parseBody(body) を見ながら読んでください。�
 まず、全体はヘッダ・ボディ・フッタの三部構成になっています。ヘッダとフッタは定形文でデータは二番目の tr に入っています。
 
 ヘッダ(Ingress - Begin Transmissionの画像)
- div > table[width="750px"] > tbody > tr:eq(0)
+
+    div > table[width="750px"] > tbody > tr:eq(0)
 
 ボディ
- div > table[width="750px"] > tbody > tr:eq(1)
+
+    div > table[width="750px"] > tbody > tr:eq(1)
  
 フッタ(Ingress - End Transmissionの画像)
- div > table[width="750px"] > tbody > tr:eq(2)
+
+    div > table[width="750px"] > tbody > tr:eq(2)
 
 
 ボディの中身はテーブルになっていて各 tr に色々なデータが入っています。
- div > table[width="750px"] > tbody > tr:eq(1) > td > table[width="700px"] > tbody > tr
+
+    div > table[width="750px"] > tbody > tr:eq(1) > td > table[width="700px"] > tbody > tr
 
 
 tr の一行目は必ずエージェントの情報です。
- エージェント(agent)
- td > span:contains("Agent Name:") + span
- td > span:contains("Faction:") + span
- td > span:contains("Level:") + span
+
+    エージェント(agent)
+    td > span:contains("Agent Name:") + span
+    td > span:contains("Faction:") + span
+    td > span:contains("Level:") + span
 
 
 tr の二行目以降は以下のいずれかの情報が入っています。
 
- 横棒(hr) 最初に出現するhrには DAMAGE REPORT の文字が入っています
- td[style*="border-bottom: 2px solid #403F41;"]
+横棒(hr) 最初に出現するhrには DAMAGE REPORT の文字が入っています
 
- ポータル名と住所とintel mapへのリンク(portal)
- td > div:eq(1) > a[href^="https://www.ingress.com/intel?ll="]
+    td[style*="border-bottom: 2px solid #403F41;"]
 
- ポータル画像(image) 大きめです(160px)
- td > div[style="width:1000px;"] > div[style*="height: 160px"] > img
+ポータル名と住所とintel mapへのリンク(portal)
 
- リンク先のポータル画像(linkedImage) メインのポータル画像よりちょっと小さめです(100px)
- td > div[style="width:1000px;"] > div[style*="height: 100px"] > img
+    td > div:eq(1) > a[href^="https://www.ingress.com/intel?ll="]
 
- リンク破壊の文字列(linkDestroyed) 単数だと LINK DESTROYED, 複数だと LINKS DESTROYED です
- td > table[width="700px"] > tbody > tr > td[width="50px"] + td:contains(" DESTROYED")
+ポータル画像(image) 大きめです(160px)
 
- リンク先のポータル名と住所とintel mapへのリンク(linkedPortal)
- td > table[width="700px"] > tbody > tr > td[width="50px"] + td > a[href^="https://www.ingress.com/intel?ll="]
+    td > div[style="width:1000px;"] > div[style*="height: 160px"] > img
 
- ダメージ情報(damage)
- td > table[width="700px"] > tbody > tr > td[width="400px"] > div:contains("DAMAGE:")
+リンク先のポータル画像(linkedImage) メインのポータル画像よりちょっと小さめです(100px)
+
+    td > div[style="width:1000px;"] > div[style*="height: 100px"] > img
+
+リンク破壊の文字列(linkDestroyed) 単数だと LINK DESTROYED, 複数だと LINKS DESTROYED です
+
+    td > table[width="700px"] > tbody > tr > td[width="50px"] + td:contains(" DESTROYED")
+
+リンク先のポータル名と住所とintel mapへのリンク(linkedPortal)
+
+    td > table[width="700px"] > tbody > tr > td[width="50px"] + td > a[href^="https://www.ingress.com/intel?ll="]
+
+ダメージ情報(damage)
+
+    td > table[width="700px"] > tbody > tr > td[width="400px"] > div:contains("DAMAGE:")
 
 
 最も典型的な、一通のメールで一つのポータルへ攻撃は以下のようなフォーマットです。
- agent
- hr
- portal
- image
- damage
+
+    agent
+    hr
+    portal
+    image
+    damage
 
 リンク破壊が伴っていると以下のようになります。例は三本破壊の場合。
- agent
- hr
- portal
- image
- linkDestroyed
- linkedPortal
- linkedImage
- linkedPortal
- linkedImage
- linkedPortal
- linkedImage
- damage
+
+    agent
+    hr
+    portal
+    image
+    linkDestroyed
+    linkedPortal
+    linkedImage
+    linkedPortal
+    linkedImage
+    linkedPortal
+    linkedImage
+    damage
 
 一通のメール中に複数のポータルへの攻撃があると以下のようになります。
- agent
- hr
- portal
- image
- damage
- hr
- portal
- image
- damage
- hr
- portal
- image
- damage
+
+    agent
+    hr
+    portal
+    image
+    damage
+    hr
+    portal
+    image
+    damage
+    hr
+    portal
+    image
+    damage
 
 
 正規表現っぽくまとめると以下の様になります。
- agent (hr portal image (linkDestroyed (linkedPortal linkedImage)+)* damage)+
+
+    agent (hr portal image (linkDestroyed (linkedPortal linkedImage)+)* damage)+
 
 
 もし間違いや新しいフォーマットをみつけたら教えて下さい :)
