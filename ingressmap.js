@@ -27,7 +27,7 @@ var userId = 'me';
 var maxResults = 100;
 var q = 'subject:"Ingress Damage Report: Entities attacked by" from:ingress-support@google.com';
 var maxLoop = 100;
-
+var parserDebug = false;
 
 ///
 /// global variable
@@ -99,7 +99,7 @@ function handleAuthResult(authResult) {
         gmailList('', maxLoop, [], function(ids) {
         	showMessage('Loading mail ID from Gmail... (' + (maxLoop * maxResults - ids.length) + ')');
         }, function(ids) {
-        	var newIds = ids.filter(function(id) { return !isExistReport(id); }).reverse(); // sort by time (older first)
+        	var newIds = ids.filter(function(id) { return !isExistReport(id + '_0'); }).reverse(); // sort by time (older first)
         	if (newIds && 0 != newIds.length) {
         		gmailGet(newIds, handleGmailResult, function(ids, response) {
         			clearAllPortals();
@@ -127,11 +127,13 @@ function handleGmailResult(ids, response) {
 			if (result && !result.error) {
 				var header = response.result[id].result['payload']['headers'];
 				var body = response.result[id].result['payload']['parts'][1]['body']['data'];
-				var report = parseMail(id, header, urlsafe_b64_to_utf8(body));
-				if (null == report) {
+				var reports = parseMail(id, header, urlsafe_b64_to_utf8(body));
+				if (null == reports) {
 					console.error({ func: 'handleGmailResult', error: 'failed to parse mail', id: id, result: response.result[id].result });
 				} else {
-					saveReport(report);
+					reports.forEach(function(report) {
+						saveReport(report);
+					});
 				}
 			} else {
 				console.error({ func: 'handleGmailResult', error: 'failed to get message from Gmail', id: id, result: result });
@@ -196,7 +198,7 @@ function showAllPortals() {
 }
 
 function showStatus() {
-   	showMessage('Ingress Damage Reports Map ,Reports: ' + reportsLength() + ', Portals: ' + markers.length + ' (<span style="color: red">UPC: ' + upcCount + '</span>)');
+   	showMessage('Ingress Damage Reports Map, Reports: ' + reportsLength() + ', Portals: ' + markers.length + ' (<span style="color: red">UPC: ' + upcCount + '</span>)');
 }
 
 function showPortal(portal) {
@@ -413,23 +415,17 @@ function showMessage(mesg) {
 ///
 /// mail parser
 ///
-// FIXME: refine RE or DOM based
-var ag_pat = /<tr><td.*><span.*>Agent Name:<\/span>(.*?)<br \/><span.*>Faction:<\/span><span.*>(.*?)<\/span><br \/><span.*>Current Level:<\/span><span>(.*?)<\/span><\/td><\/tr>/;
-var dmgrep_pat = /<tr><td.*><div>DAMAGE REPORT<\/div><\/td><\/tr><tr><td .*?><div>(.*?)<\/div><div><a target="_blank" href="(.*?)" .*?>(.*?)<\/a><\/div><\/td><\/tr><tr><td .*?><table .*?><div .*?><div .*?><img src="(.*?)" .*?><\/div><div .*?><img src="(.*?)" .*?><\/div><div .*?><\/div><\/table><\/td><\/tr>/;
-var dmg_pat = /<td.*><div>DAMAGE:<br>(.*?)<\/div><\/td><td><div>STATUS:<br>(.*?)<br>Health: (.*?)<br>Owner: (.*?)<\/div><\/td>/;
-var dmg_line_pat = /^(.*?) destroyed by (.*?) at (.*?)$/;
-var name_pat = /^<span style="color: (.*?)">(.*?)<\/span>$/;
-var intel_pat = /^http.*&pll=([\d\+.]+?),([\d\+.]+?)&z=\d+$/;
-
 function parseMail(id, header, body) {
 	var head = parseHeader(header);
-	var body = parseBody(body);
-	if (null != head && null != body) {
+	if (parserDebug) { console.log(['parseMail', head['Subject'], head['Date']]); }
+	var bodies = parseBody(body);
+	if (null != head && null != bodies && 0 != bodies.length) {
 		var local = new Date(head['Date']);
-		// var result = { gmailId: id, utcDateString: head['Date'], from: head['From'], to: head['To'] , localDateString: local.toString(), localYear: local.getFullYear(), localMonth: local.getMonth() + 1, localDate: local.getDate(), localHours: local.getHours(), localMinutes: local.getMinutes(), localSeconds: local.getSeconds(), localDay: local.getDay(), localDayString: toWeekDay(local.getDay()) };
-		var result = { gmailId: id, time: local.getTime(), localYear: local.getFullYear(), localMonth: local.getMonth() + 1, localDate: local.getDate(), localHours: local.getHours(), localMinutes: local.getMinutes(), localSeconds: local.getSeconds(), localDay: local.getDay(), localDayString: toWeekDay(local.getDay()) };
-		result = $.extend(result, body);
-		return result;
+		return bodies.map(function(b, i) {
+			var result = { gmailId: id + '_' + i, time: local.getTime(), localYear: local.getFullYear(), localMonth: local.getMonth() + 1, localDate: local.getDate(), localHours: local.getHours(), localMinutes: local.getMinutes(), localSeconds: local.getSeconds(), localDay: local.getDay(), localDayString: toWeekDay(local.getDay()) };
+			result = $.extend(result, b);
+			return result;
+		});
 	} else {
 		return null;
 	}
@@ -463,57 +459,149 @@ function parseHeader(headers) {
 	return names.every(function(name) { return name in result }) ? result : null;
 }
 
-function parseName(name) {
-	var m = name_pat.exec(name);
-	return null != m ? [m[2], colorToFaction(m[1])] : [name, ''];
-}
-
-function parseDamageLine(lines) {
-	var targets = [];
-	var enemies = [];
-	var dates = [];
-	var l = lines.split('<br>');
-	for (var i in l) {
-		var line = l[i]; 
-		m = dmg_line_pat.exec(line)
-		if (null != m) {
-			targets.push(m[1]);
-			enemies.push(parseName(m[2]));
-			dates.push(m[3]);
-	    } else {
-	    	// unknown format
-	    }
-	}
-	return [targets, enemies, dates];
+function spanToFaction(span) {
+	var style = span.attr('style');
+	return style ? colorToFaction(style.substring('color: '.length)) : '';
 }
 
 function parseBody(body) {
-	// console.log(body);
-	var result = {};
+	var result = [];
+	var r = {};
+	var agentName = '';
+	var agentFaction = '';
+	var agentLevel = '';
 
-	var m = ag_pat.exec(body);
-	if (null == m) return null;
-	var agent = parseName(m[1]);
-	result['agentName'] = agent[0]; result['agentFaction'] = agent[1]; result['agentLevel'] = m[3]; // result['agentFactionName'] = m[2]; 
+	// http://stackoverflow.com/questions/15150264/jquery-how-to-stop-auto-load-imges-when-parsehtml
+	// replace <img src="..."> to <img no_load_src="..."> to stop auto load image 
+	body = body.replace(/<img [^>]*src=['"]([^'"]+)[^>]*>/gi, function (match, capture) { return '<img no_load_src="' + capture + '" />';})
+	var div = $.parseHTML(body);
+	// console.log(div);
 
-	var m = dmgrep_pat.exec(body);
-	if (null == m) return null;
-	result['portalName'] = m[1]; result['portalImageUrl'] = m[4]; // result['portalAddress'] = m[3]; result['portalMapUrl'] = m[5];
+	// table[width="750px"] > tbody > tr:eq(0) == header image (** Ingress - Begin Transmission **)
+	// table[width="750px"] > tbody > tr:eq(1) > td > table[width="700px"] > tbody > tr == body
+	// table[width="750px"] > tbody > tr:eq(2) == footer image (** Ingress - End Transmission **)
+	var trs = $('table[width="750px"] > tbody > tr:eq(1) > td > table[width="700px"] > tbody > tr', div);
+	trs.each(function(i, tr) {
+		if (0 == i) { // first line must be agent info
+			// <td valign="top" style="font-size: 13px; padding-bottom: 1.5em;"><span style="font-weight: normal; margin-right: .3em; font-size: 10px; text-transform: uppercase;">Agent Name:</span><span style="color: #3679B9;">Sabara55</span><br><span style="font-weight: normal; margin-right: .3em; font-size: 10px; text-transform: uppercase;">Faction:</span><span style="color: #3679B9;">Resistance</span><br><span style="font-weight: normal; margin-right: .3em; font-size: 10px; text-transform: uppercase;">Current Level:</span><span>L9</span></td>
+			var agentSpan = $('td > span:contains("Agent Name:") + span', tr);
+			if (parserDebug) { console.log([i, 'agent', agentSpan.length, $(tr).html()]); }
+			agentName = agentSpan.html();
+			agentFaction = spanToFaction(agentSpan);
+			agentLevel = $('td > span:contains("Level:") + span', tr).html();
+			r['agentName'] = agentName;
+			r['agentFaction'] = agentFaction;
+			r['agentLevel'] = agentLevel;
+			return;
+		} else {
 
-	var m = intel_pat.exec(m[2]);
-	if (null == m) return null;
-	result['latitude'] = m[1]; result['longitude'] = m[2];
+			// <td style="font-size: 17px; padding-bottom: .2em; border-bottom: 2px solid #403F41;"><div>DAMAGE REPORT</div></td>
+			// <td style="font-size: 17px;padding-bottom: .2em;border-bottom: 2px solid #403F41;text-transform: uppercase;"></td>
+			var hr = $('td[style*="border-bottom: 2px solid #403F41;"]', tr);
+			if (0 != hr.length) {
+				if (parserDebug) { console.log([i, 'hr', hr.length, hr.html(), $(tr).html()]); }
+				// do nothing
+				return;
+			}
 
-	var m = dmg_pat.exec(body);
-	if (null == m) return null;
-	var owner = parseName(m[4]);
-	result['ownerName'] = owner[0]; result['ownerFaction'] = owner[1]; // result['status'] = m[2]; result['health'] = m[3];
-	var damageHtml = m[1]; 
-	var dmg = parseDamageLine(damageHtml);
-	// result['targetList'] = dmg[0]; result['enemyList'] = dmg[1]; result['damageDateList'] = dmg[2];
-	result['enemyName'] = dmg[1][0][0]; result['enemyFaction'] = dmg[1][0][1]; // FIXME: first only??  
+			// <td style="padding-top: 1em; padding-bottom: 1em;"><div>つくし野殿山市民の森</div><div><a target="_blank" href="https://www.ingress.com/intel?ll=35.530946,139.480833&amp;pll=35.530946,139.480833&amp;z=19" style="color: #D73B8E; border: none; text-decoration: none;">1 Chome-17-92 Tsukushino, Machida, Tokyo, Japan</a></div></td>
+			var portal = $('td > div:eq(1) > a[href^="https://www.ingress.com/intel?ll="]', tr);
+			if (0 != portal.length) {
+				if (parserDebug) { console.log([i, 'portal', portal.length, $(tr).html()]); }
+				r['portalAddress'] = portal.html();
+				var intel_pat = /^http.*&pll=([\d\+.]+?),([\d\+.]+?)&z=\d+$/;
+				var m = intel_pat.exec(portal.attr('href'));
+				if (null != m) {
+					r['latitude'] = m[1]; r['longitude'] = m[2];
+				} else {
+					// unknown format
+				}
+				r['portalName'] = $('td > div:eq(0)', tr).html();
+				return;
+			}
 
-	//console.log(result);
+			// <td style="overflow: hidden;"><div style="width:1000px;"><div style="width: auto; height: 160px; float: left; display: inline-block;"><img src="http://lh4.ggpht.com/wX3cnaddhavarwpyH-MV4D1yaEt_5R6cx9747przwbaOW5L0gs8KWYl1anzmVLU_n91IYsB-Md2uoBM9NhLw" alt="Portal - つくし野殿山市民の森" height="160" style="display: block;border: 0;height: auto;line-height: 100%;outline: none;text-decoration: none;"></div><div style="width: auto; height: 160px; float: left; display: inline-block; overflow:hidden;"><img src="http://maps.googleapis.com/maps/api/staticmap?center=35.530946,139.480933&amp;zoom=19&amp;size=700x160&amp;sensor=false&amp;style=visibility:on%7Csaturation:-50%7Cinvert_lightness:true%7Chue:0x131c1c&amp;style=feature:water%7Cvisibility:on%7Chue:0x005eff%7Cinvert_lightness:true&amp;style=feature:poi%7Cvisibility:off&amp;style=feature:transit%7Cvisibility:off&amp;markers=icon:http://commondatastorage.googleapis.com/ingress.com/img/map_icons/marker_images/neutral_icon.png%7Cshadow:false%7C35.530946,139.480833" alt="Map" width="700" height="160" style="display: block;border: 0;height: auto;line-height: 100%;outline: none;text-decoration: none;"></div><div style="clear:both;"></div></div><table cellpadding="0" cellspacing="0" border="0"></table></td>
+			var image = $('td > div[style="width:1000px;"] > div[style*="height: 160px"] > img', tr);
+			if (2 == image.length) {
+				if (parserDebug) { console.log([i, 'image', image.length, $(tr).html()]); }
+				// r['portalImageUrl'] = $(image[0]).attr('src');
+				r['portalImageUrl'] = $(image[0]).attr('no_load_src');
+				// r['mapImageUrl'] = $(image[1]).attr('src');
+				return;
+			}
+
+			// <td style="overflow: hidden;"><div style="width:1000px;"><div style="width: auto; height: 100px; float: left; display: inline-block;"><img src="http://lh5.ggpht.com/kZkV9TBIhSKQlxNV5K_Pa1MeRn0d-_EJ67wwD7BbPCR8DdKyL2o5469tWDydi3brjA-JlBsAN1afolaN6_qvW4hiQ03Ssor0kO6X_F5pK4qbzTrL" alt="Portal - Saginuma Station's Clock" height="100" style="display: block;border: 0;height: auto;line-height: 100%;outline: none;text-decoration: none;"></div><div style="width: auto; height: 100px; float: left; display: inline-block; overflow:hidden;"><img src="http://maps.googleapis.com/maps/api/staticmap?center=35.579217,139.573467&amp;zoom=19&amp;size=650x100&amp;sensor=false&amp;style=visibility:on%7Csaturation:-50%7Cinvert_lightness:true%7Chue:0x131c1c&amp;style=feature:water%7Cvisibility:on%7Chue:0x005eff%7Cinvert_lightness:true&amp;style=feature:poi%7Cvisibility:off&amp;style=feature:transit%7Cvisibility:off&amp;markers=icon:http://commondatastorage.googleapis.com/ingress.com/img/map_icons/marker_images/hum_2res.png%7Cshadow:false%7C35.579217,139.573367" alt="Map" width="650" height="100" style="display: block;border: 0;height: auto;line-height: 100%;outline: none;text-decoration: none;"></div><div style="clear:both;"></div></div><table cellpadding="0" cellspacing="0" border="0" width="700px"><tbody><tr><td width="50px" style="line-height: 0; vertical-align: top;"><img src="http://commondatastorage.googleapis.com/ingressemail/damagereport/line_3.png" width="50" height="22"></td></tr></tbody></table></td>
+			var linkedImage = $('td > div[style="width:1000px;"] > div[style*="height: 100px"] > img', tr);
+			if (2 == linkedImage.length) {
+				// TODO: do something
+				if (parserDebug) { console.log([i, 'linkedImage', linkedImage.length, $(tr).html()]); }
+				return;
+			}
+
+			// <td><table cellpadding="0" cellspacing="0" border="0" width="700px"><tbody><tr><td width="50px" style="line-height: 0;"><img src="http://commondatastorage.googleapis.com/ingressemail/damagereport/line_1.png" width="50" height="26"></td><td>LINK DESTROYED</td></tr></tbody></table></td>
+			// <td><table cellpadding="0" cellspacing="0" border="0" width="700px"><tbody><tr><td width="50px" style="line-height: 0;"><img src="http://commondatastorage.googleapis.com/ingressemail/damagereport/line_1.png" width="50" height="26"></td><td>LINKS DESTROYED</td></tr></tbody></table></td>
+			var linkDestroyed = $('td > table[width="700px"] > tbody > tr > td[width="50px"] + td:contains(" DESTROYED")', tr); // LINK or LINKS
+			if (0 != linkDestroyed.length) {
+				// TODO: do something
+				if (parserDebug) { console.log([i, 'linkDestroyed', linkDestroyed.length, linkDestroyed.html(), $(tr).html()]); }
+				return;
+			}
+
+			// <td><table cellpadding="0" cellspacing="0" border="0" width="700px"><tbody><tr><td width="50px" style="line-height: 0;"><img src="http://commondatastorage.googleapis.com/ingressemail/damagereport/line_1.png" width="50" height="26"></td><td>Fountain: <a target="_blank" href="https://www.ingress.com/intel?ll=35.613760,139.626983&amp;pll=35.613760,139.626983&amp;z=19" style="color: #D73B8E; border: none; text-decoration: none;">Tamagawa Dori, 3 Chome Tamagawa, Setagaya, Tokyo 158-0094, Japan</a></td></tr></tbody></table></td>
+			var linkedPortal = $('td > table[width="700px"] > tbody > tr > td[width="50px"] + td > a[href^="https://www.ingress.com/intel?ll="]', tr);
+			if (0 != linkedPortal.length) {
+				// TODO: do something
+				if (parserDebug) { console.log([i, 'linkedPortal', linkedPortal.length, linkedPortal.html(), $(tr).html()]); }
+				return;
+			}
+
+			// <td style="padding: 1em 0;"><table cellpadding="0" cellspacing="0" border="0" width="700px"><tbody><tr><td width="400px"><div>DAMAGE:<br>1 Resonator destroyed by <span style="color: #428F43;">shmz</span> at 02:22 hrs GMT<br>No remaining Resonators detected on this Portal.</div></td><td><div>STATUS:<br>Level 1<br>Health: 0%<br>Owner: [uncaptured]</div></td></tr></tbody></table></td>
+			var damage = $('td > table[width="700px"] > tbody > tr > td[width="400px"] > div:contains("DAMAGE:")', tr);
+			if (0 != damage.length) {
+				if (parserDebug) { console.log([i, 'damage', damage.length, $(tr).html()]); }
+
+				// DAMAGE:<br>1 Resonator destroyed by <span style="color: #428F43;">shmz</span> at 02:22 hrs GMT<br>No remaining Resonators detected on this Portal.
+				var dmg_pat = /^(.*) destroyed by (.*) at (.*)$/;
+				var targets = []; var enemies = []; var dates = [];
+				damage.html().split('<br>').forEach(function(line){
+					var m = dmg_pat.exec(line);
+					if (null != m) {
+						targets.push(m[1]);
+						var enemySpan = $($.parseHTML(m[2]));
+						enemies.push([enemySpan.html(), spanToFaction(enemySpan)]);
+						dates.push(m[3]);
+					} else {
+						// unknown format
+					}
+				});
+				r['enemyName'] = enemies[0][0]; // FIXME: first only??
+				r['enemyFaction'] = enemies[0][1]; // FIXME: first only??
+
+				// STATUS:<br>Level 1<br>Health: 0%<br>Owner: [uncaptured]
+				var status = $('td > table[width="700px"] > tbody > tr > td > div:contains("STATUS:")', tr);
+				var status_pat = /^STATUS:<br>Level (.*)<br>Health: (.*)<br>Owner: (.*)$/;
+				var m = status_pat.exec(status.html());
+				if (null != m) {
+					var ownerSpan = $($.parseHTML(m[3]));
+					r['ownerName'] = ownerSpan.html() ? ownerSpan.html() : ownerSpan.text();
+					r['ownerFaction'] = spanToFaction(ownerSpan);
+				} else {
+					// unknown format
+				}
+
+				result.push(r);
+				r = {};
+				r['agentName'] = agentName;
+				r['agentFaction'] = agentFaction;
+				r['agentLevel'] = agentLevel;
+				return;
+			}
+
+			console.error({ func: 'parseBodyByDOM', error: 'Unknown format', i: i, tr: $(tr).html() });
+		}
+	});
+
+	if (parserDebug) { console.log(['parseBodyByDOM', result.length, result]); }
 	return result;
 }
 
