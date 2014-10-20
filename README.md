@@ -54,7 +54,8 @@ ingressmap.js の関数 parseBody(body) を見ながら読んでください。�
 
 tr の一行目は必ずエージェントの情報です。
 
-    エージェント(agent)
+エージェント(`agent`)
+
     td > span:contains("Agent Name:") + span
     td > span:contains("Faction:") + span
     td > span:contains("Level:") + span
@@ -62,31 +63,31 @@ tr の一行目は必ずエージェントの情報です。
 
 tr の二行目以降は以下のいずれかの情報が入っています。
 
-横棒(hr) 最初に出現するhrには DAMAGE REPORT の文字が入っています
+横棒(`hr`) 最初に出現するhrには DAMAGE REPORT の文字が入っています
 
     td[style*="border-bottom: 2px solid #403F41;"]
 
-ポータル名と住所とintel mapへのリンク(portal)
+ポータル名と住所とintel map(`portal`)
 
     td > div:eq(1) > a[href^="https://www.ingress.com/intel?ll="]
 
-ポータル画像(image) 大きめです(160px)
+ポータル画像(`image`) 大きめです(160px)
 
     td > div[style="width:1000px;"] > div[style*="height: 160px"] > img
 
-リンク先のポータル画像(linkedImage) メインのポータル画像よりちょっと小さめです(100px)
+リンク先のポータル画像(`linkedImage`) メインのポータル画像よりちょっと小さめです(100px)
 
     td > div[style="width:1000px;"] > div[style*="height: 100px"] > img
 
-リンク破壊の文字列(linkDestroyed) 単数だと LINK DESTROYED, 複数だと LINKS DESTROYED です
+リンク破壊の文字列(`linkDestroyed`) 単数だと LINK DESTROYED, 複数だと LINKS DESTROYED です
 
     td > table[width="700px"] > tbody > tr > td[width="50px"] + td:contains(" DESTROYED")
 
-リンク先のポータル名と住所とintel mapへのリンク(linkedPortal)
+リンク先のポータル名と住所とintel map(`linkedPortal`)
 
     td > table[width="700px"] > tbody > tr > td[width="50px"] + td > a[href^="https://www.ingress.com/intel?ll="]
 
-ダメージ情報(damage)
+ダメージ情報(`damage`)
 
     td > table[width="700px"] > tbody > tr > td[width="400px"] > div:contains("DAMAGE:")
 
