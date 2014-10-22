@@ -15,6 +15,10 @@ http://ingress.xii.jp/
 
 認証に成功すると Gmail のデータを取得しはじめますのでしばらく待ってください。初回起動時は大量のメールを通信しますので結構時間がかかります。2回目以降はキャッシュを使うのでそこそこ速くなります。メールの取得が終わるとメールの内容を解析してその結果を地図上に丸印で表示します。青い丸(または緑の丸)はダメージを受けたポータル、赤い丸はダメージを受けたポータルのうち自分がオーナーだったことのあるポータル(ほぼ UPC に相当)です。
 
+もし承認を取り消したい場合は以下のページから Ingress Damage Reports Map のアクセス権を取り消してください。
+
+https://security.google.com/settings/security/permissions
+
 
 ### 開発者向け情報
 自分のサイトで Ingress Damage Reports Map を運用するには以下のようにします。
@@ -26,6 +30,9 @@ https://console.developers.google.com/
 Gmail API は Web Application として Client ID を発行し、Google Maps は Browser Applications として API Key を発行して、それぞれソース中の該当箇所を書き換えておきます。
 
 HTML と JavaScript と CSS を自分のサイト上にコピーして HTML にアクセスすれば起動します。
+
+詳しくは、参考URLを見てください。
+
 
 ### Ingress Damage Report Mail のフォーマット
 
@@ -142,10 +149,17 @@ tr の二行目以降は以下のいずれかの情報が入っています。
 
 
 ### 参考URL
+
+Google APIs Client Library for JavaScript (Beta)
+
+https://developers.google.com/api-client-library/javascript/start/start-js
+
 Gmail API
+
 https://developers.google.com/gmail/api/
 
 Google Maps JavaScript API v3
+
 https://developers.google.com/maps/documentation/javascript/
 
 
