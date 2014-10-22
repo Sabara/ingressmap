@@ -28,6 +28,7 @@ var maxResults = 100;
 var q = 'subject:"Ingress Damage Report: Entities attacked by" from:ingress-support@google.com';
 var maxLoop = 100;
 var parserDebug = false;
+var version = '0.1';
 
 ///
 /// global variable
@@ -43,10 +44,10 @@ var openedInfoWindow = null;
 /// main
 ///
 $(document).ready(function() {
+	initLocalStorage();
 
 	disablePOIInfoWindow();
 
-	// clearReports();
 	// printLocalStorage();
 
 	var mapOpt = {
@@ -99,7 +100,7 @@ function handleAuthResult(authResult) {
         gmailList('', maxLoop, [], function(ids) {
         	showMessage('Loading mail ID from Gmail... (' + (maxLoop * maxResults - ids.length) + ')');
         }, function(ids) {
-        	var newIds = ids.filter(function(id) { return !isExistReport(id + '_0'); }).reverse(); // sort by time (older first)
+        	var newIds = ids.filter(function(id) { return !isExistReport(generateReportId(id, 0)); }).reverse(); // sort by time (older first)
         	if (newIds && 0 != newIds.length) {
         		gmailGet(newIds, handleGmailResult, function(ids, response) {
         			clearAllPortals();
@@ -124,14 +125,19 @@ function handleGmailResult(ids, response) {
 		try {
 			// FIXME: error handling if headers missing
 			if (result && !result.error) {
-				var header = response.result[id].result['payload']['headers'];
-				var body = response.result[id].result['payload']['parts'][1]['body']['data'];
-				var reports = parseMail(id, header, urlsafe_b64_to_utf8(body));
-				if (null == reports) {
-					console.error({ func: 'handleGmailResult', error: 'failed to parse mail', id: id, result: response.result[id].result });
+				var header = result['payload']['headers'];
+				var body = result['payload']['parts'][1]['body']['data'];
+				var parsedMails = parseMail(id, header, urlsafe_b64_to_utf8(body));
+				if (null == parsedMails) {
+					console.error({ func: 'handleGmailResult', error: 'failed to parse mail', id: id, result: result });
 				} else {
-					reports.forEach(function(report) {
-						saveReport(report);
+					parsedMails.forEach(function(parsedMail) {
+						saveReport(parsedMail['reportId'], parsedMail['time'],
+								   parsedMail['latitude'], parsedMail['longitude'],
+								   parsedMail['agentName'], parsedMail['agentFaction'], parsedMail['agentLevel'],
+								   parsedMail['ownerName'], parsedMail['ownerFaction'],
+								   parsedMail['enemyName'], parsedMail['enemyFaction']);
+						savePortal(parsedMail['latitude'], parsedMail['longitude'], parsedMail['time'], parsedMail['portalName'], parsedMail['portalImageUrl']);
 					});
 				}
 			} else {
@@ -184,41 +190,44 @@ function gmailGet(ids, progressFunc, doneFunc) {
 }
 
 function showAllPortals() {
-   	if (0 == reportsLength()) {
+	var len = reportsLength();
+   	if (0 == len) {
    		return;
    	}
-	showMessage('Loading reports... (' + reportsLength() + ')');
+	showMessage('Loading reports... (' + len + ')');
    	var reports = loadAllReports();
    	showMessage('Analyzing reports... (' + reports.length + ')');
-   	var portals = analyzeReports(reports);
-   	showMessage('Showing portals... (' + portals.length + ')');
-   	portals.forEach(showPortal);
+   	var stats = analyzeReports(reports);
+   	showMessage('Showing portals... (' + stats.length + ')');
+   	stats.forEach(showPortal);
    	// printLocalStorage();
 }
 
 function showStatus() {
-   	showMessage('Ingress Damage Reports Map, Reports: ' + reportsLength() + ', Portals: ' + markers.length + ' (<span style="color: red">UPC: ' + upcCount + '</span>)');
+   	showMessage('Ingress Damage Reports Map, Reports: ' + reportsLength() + ', Portals: ' + portalsLength() + ' (<span style="color: red">UPC: ' + upcCount + '</span>)');
 }
 
-function showPortal(portal) {
-	var portalName = portal[0][0]
-	var latitude = portal[0][1];
-	var longitude = portal[0][2];
-	var enemies = portal[1][0];
-	var localHours = portal[1][1];
-	var localDays = portal[1][2];
-	var portalImageUrl = portal[1][3];
-	var owners = portal[1][4];
-	var agentName = portal[1][5];
-	var agentFaction = portal[1][6];
+function showPortal(stats) {
+	var latitude = stats['latitude'];
+	var longitude = stats['longitude'];
+	var agentName = stats['agentName'];
+	var agentFaction = stats['agentFaction'];
+	var owners = stats['ownerName'];
+	var enemies = stats['enemyName'];
+	var hours = stats['hours'];
+	var days = stats['days'];
+
+	var portal = loadPortal(latitude, longitude);
+	var portalName = portal['portalName'];
+	var portalImageUrl = portal['portalImageUrl'];
 
 	var intelUrl = 'https://www.ingress.com/intel?ll=' + latitude + ',' + longitude + '&pll=' + latitude + ',' + longitude + '&z=19';
 	var isUPC = owners.some(function(owner) { return agentName == owner[0]; });
 	var color = isUPC ? 'red' : ('RES' == agentFaction ? '#3679B9' : '#428F43');
 	var titleText = decodeHTMLEntities(portalName) + (isUPC ? ' (UPC)' : '');
 	var enemyTable = '<table><thead><tr><td>Agent</td><td>#</td></tr></thead><tbody><tr><td>' + enemies.map(function(item) { return item[0] + '</td><td class="td_number">' + item[1]; }).join('</td></tr><tr><td>') + '</td></tr></tbody></table>';
-	var localHoursTable = '<table><thead><tr><td>Hour</td><td>#</td></tr></thead><tbody><tr><td class="td_number">' + localHours.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return item.join('</td><td class="td_number">'); }).join('</td></tr><tr><td class="td_number">') + '</td></tr></tbody></table>';
-	var localDaysTable = '<table><thead><tr><td>Day</td><td>#</td></tr></thead><tbody><tr><td>' + localDays.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return toWeekDay(item[0]) + '</td><td class="td_number">' + item[1]; }).join('</td></tr><tr><td>') + '</td></tr></tbody></table>';
+	var localHoursTable = '<table><thead><tr><td>Hour</td><td>#</td></tr></thead><tbody><tr><td class="td_number">' + hours.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return item.join('</td><td class="td_number">'); }).join('</td></tr><tr><td class="td_number">') + '</td></tr></tbody></table>';
+	var localDaysTable = '<table><thead><tr><td>Day</td><td>#</td></tr></thead><tbody><tr><td>' + days.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return toWeekDay(item[0]) + '</td><td class="td_number">' + item[1]; }).join('</td></tr><tr><td>') + '</td></tr></tbody></table>';
 	var content = $('<div />').append($('<h3 />').html(portalName + (isUPC ? ' (<span style="color: red">UPC</span>)' : ''))).append($('<a />').addClass('portal_info').attr('href', intelUrl).attr('target', '_blank').append($('<img />').attr({ 'src': portalImageUrl }).addClass('portal_img'))).append($('<div />').addClass('portal_info').html(enemyTable)).append($('<div />').addClass('portal_info').html(localHoursTable)).append($('<div />').addClass('portal_info').html(localDaysTable));
 
 	var iconOpt = { path: google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: color, fillOpacity: 0.4, strokeColor: color, strokeWeight: 2 };
@@ -256,84 +265,82 @@ function clearAllPortals() {
 ///
 /// reports
 ///
-function reportsLength() {
-	return localStorage.length;
-}
-
-function isValidReport(report) {
-	return report && ('gmailId' in report) && ('string' === typeof report['gmailId']) && 0 < report['gmailId'].length; 
-}
-
-var REPORT_FIELDS = [
-    'gmailId',
-    'time', 'localYear', 'localMonth', 'localDate', 'localHours', 'localMinutes', 'localSeconds', 'localDay', 'localDayString',
-    'agentName', 'agentFaction', 'agentLevel',
-    'portalName', 'portalImageUrl',
-    'latitude', 'longitude',
-    'ownerName', 'ownerFaction',
-    'enemyName', 'enemyFaction'
-];
-
-function compressReport(report) {
-	if (null != report && REPORT_FIELDS.every(function(field) { return field in report; })) {
-		var compressedReport =  REPORT_FIELDS.map(function(field) { return report[field]; });
-		return compressedReport;
+function initLocalStorage() {
+	var v = localStorage.getItem(generateConfigId('version'));
+	if (v && 'string' === typeof v && v == version) {
+		// same version
+		// do nothing
 	} else {
-		console.error({ func: 'compressReport', error: 'invalid value', report: report });
-		return null;
+		showMessage('Updating localStorage... (' + v + ' to ' + version + ')');
+		localStorage.clear();
+		localStorage.setItem(generateConfigId('version'), version);
 	}
 }
 
-function uncompressReport(compressedReport) {
-	if (REPORT_FIELDS.length == compressedReport.length) {
-		var report = {};
-		for (var i = 0; i < compressedReport.length; i++) {
-			report[REPORT_FIELDS[i]] = compressedReport[i];
+function savePortal(latitude, longitude, time, portalName, portalImageUrl) {
+	var oldPortal = localStorage.getItem(generatePortalId(latitude, longitude));
+	if (oldPortal && 'string' === typeof oldPortal && 0 < oldPortal.length) {
+		var portal = JSON.parse(oldPortal);
+		if (time < portal[2]) {
+			return false;
 		}
-		return report;
-	} else {
-		console.error({ func: 'uncompressReport', error: 'invalid value', compressedReport: compressedReport });
-		return null;
 	}
+	var newPortal = JSON.stringify([latitude, longitude, time, portalName, portalImageUrl]);
+	localStorage.setItem(generatePortalId(latitude, longitude), newPortal);
+	return true;
 }
 
+function reportsLength() {
+	var len = 0;
+	for (var i = 0; i < localStorage.length; i++){
+		if (isReportId(localStorage.key(i))) len++;
+	}
+	return len;
+}
 
-function saveReport(report) {
-	if (!isValidReport(report)) {
-		console.error({ func: 'saveReport', error: 'invalid value', report: report });
-		return false;
-	} else {
+function portalsLength() {
+	var len = 0;
+	for (var i = 0; i < localStorage.length; i++){
+		if (isPortalId(localStorage.key(i))) len++;
+	}
+	return len;
+}
+
+function saveReport(reportId, time, latitude, longitude, agentName, agentFaction, agentLevel, ownerName, ownerFaction, enemyName, enemyFaction) {
+	if (reportId && 'string' === typeof reportId && 0 < reportId.length) { 
 		//var dummy = ''; // dummy big data
 		//for (var i = 0; i < 500 * 1024; i++) {
 		//	dummy += 'x';
 		//}
 		//report['dummy'] = dummy;
-
-		//var jsonString = JSON.stringify(report);
-		var compressedReport = compressReport(report);
-		var jsonString = JSON.stringify(compressedReport);
+		var jsonString = JSON.stringify([reportId, time, latitude, longitude, agentName, agentFaction, agentLevel, ownerName, ownerFaction, enemyName, enemyFaction]);
 		try {
-			localStorage.setItem(report['gmailId'], jsonString);
+			localStorage.setItem(reportId, jsonString);
 			return true;
 		} catch (e) { // QUOTA_EXCEEDED_ERR
 			// http://chrisberkhout.com/blog/localstorage-errors/
-			console.error({ func: 'saveReport', error: 'failed to setItem (first)', e: e, gmailId: report['gmailId'], report: report });
+			console.error({ func: 'saveReport', error: 'failed to setItem (first)', e: e, reportId: reportId, jsonString: jsonString });
 			showMessage('Removing old reports... (' + maxResults + ')');
 			removeOldReports(maxResults);
 			try {
-				localStorage.setItem(report['gmailId'], jsonString);
+				localStorage.setItem(reportId, jsonString);
 				return true;
 			} catch (e) {
-				console.error({ func: 'saveReport', error: 'failed to setItem (retry)', e: e, gmailId: report['gmailId'], report: report });
+				console.error({ func: 'saveReport', error: 'failed to setItem (retry)', e: e, reportId: reportId, jsonString: jsonString });
 			}
 			return false;
 		}
+		return true;
+	} else {
+		console.error({ func: 'saveReport', error: 'invalid value', reportId: reportId });
+		return false;
 	}
 }
 
 function removeOldReports(count) {
-	count = count < localStorage.length ? count : localStorage.length;
-	var keys = range(0, count).map(function(i) { return localStorage.key(i); });
+	var len = reportsLength();
+	count = min(count, len);
+	var keys = range(0, count).map(function(i) { return localStorage.key(i); }).filter(isReportId); 
 	keys.forEach(function(k) {
 		var v = localStorage.getItem(k);
 		// console.log({ func: 'removeOldReports', k: k, v: (v ? v.length : v) });
@@ -341,44 +348,81 @@ function removeOldReports(count) {
 	});
 }
 
-function loadReport(gmailId) {
-	var jsonString = localStorage.getItem(gmailId);
-	if (jsonString && ('string' === typeof jsonString)) {
+function loadReport(reportId) {
+	var jsonString = localStorage.getItem(reportId);
+	if (jsonString && 'string' === typeof jsonString && 0 < jsonString.length) {
 		try {
-			var compressedReport = JSON.parse(jsonString);
-			return uncompressReport(compressedReport);
+			var r = JSON.parse(jsonString);
+			return { reportId: r[0], time: r[1], latitude: r[2], longitude: r[3], agentName: r[4], agentFaction: r[5], agentLevel: r[6], ownerName: r[7], ownerFaction: r[8], enemyName: r[9], enemyFaction: r[10] };
 		} catch (e) {
-			console.error({ func: 'loadReport', error: 'falied to parse JSON', gmailId: gmailId, jsonString: jsonString });
+			console.error({ func: 'loadReport', error: 'falied to parse JSON', reportId: reportId, jsonString: jsonString });
 			return null;
 		}
 	} else {
-		console.error({ func: 'loadReport', error: 'invalid value', gmailId: gmailId, jsonString: jsonString });
+		console.error({ func: 'loadReport', error: 'invalid value', reportId: reportId, jsonString: jsonString });
 		return null;
 	}
 }
 
-function isExistReport(gmailId) {
-	var jsonString = localStorage.getItem(gmailId);
-	return jsonString && ('string' === typeof jsonString); // FIXME: need more restrict check?
+function loadPortal(latitude, longitude) {
+	var jsonString = localStorage.getItem(generatePortalId(latitude, longitude));
+	if (jsonString && 'string' === typeof jsonString && 0 < jsonString.length) {
+		try {
+			var r = JSON.parse(jsonString);
+			return { latitude: r[0], longitude: r[1], time: r[2], portalName: r[3], portalImageUrl: r[4] };
+		} catch (e) {
+			console.error({ func: 'loadPortal', error: 'falied to parse JSON', latitude: latitude, longitude: longitude, jsonString: jsonString });
+			return null;
+		}
+	} else {
+		console.error({ func: 'loadPortal', error: 'invalid value', latitude: latitude, longitude: longitude, jsonString: jsonString });
+		return null;
+	}
+}
+
+function isExistReport(reportId) {
+	var jsonString = localStorage.getItem(reportId);
+	return jsonString && 'string' === typeof jsonString && 0 < jsonString.length; // FIXME: need more restrict check?
+}
+
+function generateReportId(gmailId, n) {
+	return gmailId + '/' + ('00' + n).substr(-2);
+}
+
+function generatePortalId(latitude, longitude) {
+	return 'p/' + latitude + ',' + longitude;
+}
+
+function generateConfigId(config) {
+	return 'z/' + config;
+}
+
+function isReportId(id) {
+	return !isPortalId(id) && !isConfigId(id);
+}
+
+function isPortalId(id) {
+	return 0 == id.indexOf('p/');
+}
+
+function isConfigId(id) {
+	return 0 == id.indexOf('z/');
 }
 
 function loadAllReports() {
 	var reports = [];
-	for (var i = 0; i < reportsLength(); i++){
-	// for (var i = reportsLength() - 1; i >= 0; i--){
+	for (var i = 0; i < localStorage.length; i++){
 		var id = localStorage.key(i);
-		var report = loadReport(id);
-		if (null != report) {
-			reports.push(report);
-		} else {
-			localStorage.removeItem(id);
+		if (isReportId(id)) {
+			var report = loadReport(id);
+			if (null != report) {
+				reports.push(report);
+			} else {
+				localStorage.removeItem(id);
+			}
 		}
 	}
 	return reports;
-}
-
-function clearReports() {
-	localStorage.clear();
 }
 
 function printLocalStorage() {
@@ -393,16 +437,16 @@ function printLocalStorage() {
 
 function analyzeReports(reports) {
 	return mapReduce(reports, function(report) {
-		return [[report['portalName'], report['latitude'], report['longitude']], [report['enemyName'], report['localHours'], report['localDay'], report['portalImageUrl'], report['ownerName'], report['agentName'], report['agentFaction']]];
+		var d = new Date(report['time']);
+		return [[report['latitude'], report['longitude']], [report['agentName'], report['agentFaction'], report['ownerName'], report['enemyName'], d.getHours(), d.getDay()]];
 	}, function(k, v) {
-		var enemyNames = v.map(function(item) { return item[0]; });
-		var localHours = v.map(function(item) { return item[1]; });
-		var localDays = v.map(function(item) { return item[2]; });
-		var portalImageUrls = v.map(function(item) { return item[3]; });
-		var ownerNames = v.map(function(item) { return item[4]; });
-		var agentNames = v.map(function(item) { return item[5]; });
-		var agentFactions = v.map(function(item) { return item[6]; });
-		return [k, [sortByValue(freq(enemyNames)), sortByValue(freq(localHours)), sortByValue(freq(localDays)), sortByValue(freq(portalImageUrls))[0][0], sortByValue(freq(ownerNames)), sortByValue(freq(agentNames))[0][0], sortByValue(freq(agentFactions))[0][0]]];
+		var agentNames = v.map(function(item) { return item[0]; });
+		var agentFactions = v.map(function(item) { return item[1]; });
+		var ownerNames = v.map(function(item) { return item[2]; });
+		var enemyNames = v.map(function(item) { return item[3]; });
+		var hours = v.map(function(item) { return item[4]; });
+		var days = v.map(function(item) { return item[5]; });
+		return { latitude: k[0], longitude: k[1], agentName: sortByValue(freq(agentNames))[0][0], agentFaction: sortByValue(freq(agentFactions))[0][0], ownerName: sortByValue(freq(ownerNames)), enemyName: sortByValue(freq(enemyNames)), hours: sortByValue(freq(hours)), days: sortByValue(freq(days)) };
 	});
 }
 
@@ -419,9 +463,9 @@ function parseMail(id, header, body) {
 	if (parserDebug) { console.log(['parseMail', head['Subject'], head['Date']]); }
 	var bodies = parseBody(body);
 	if (null != head && null != bodies && 0 != bodies.length) {
-		var local = new Date(head['Date']);
+		var d = new Date(head['Date']);
 		return bodies.map(function(b, i) {
-			var result = { gmailId: id + '_' + i, time: local.getTime(), localYear: local.getFullYear(), localMonth: local.getMonth() + 1, localDate: local.getDate(), localHours: local.getHours(), localMinutes: local.getMinutes(), localSeconds: local.getSeconds(), localDay: local.getDay(), localDayString: toWeekDay(local.getDay()) };
+			var result = { reportId: generateReportId(id , i), time: d.getTime() };
 			result = $.extend(result, b);
 			return result;
 		});
@@ -436,10 +480,10 @@ function toWeekDay(day) {
 }
 
 function colorToFaction(color) {
-	if ('#428F43;' == color) {
+	if ('#3679B9;' == color) {
+		return 'RES';
+	} else if ('#428F43;' == color) {
 		return 'ENL';
-	} else if ('#3679B9;' == color) {
-	    return 'RES';
 	} else {
 		return '';
 	}
@@ -513,7 +557,7 @@ function parseBody(body) {
 				if (null != m) {
 					r['latitude'] = m[1]; r['longitude'] = m[2];
 				} else {
-					console.error({ func: 'parseBodyByDOM', error: 'Unknown format (intel)', href: portal.attr('href'), i: i, tr: $(tr).html() });
+					console.error({ func: 'parseBody', error: 'Unknown format (intel)', href: portal.attr('href'), i: i, tr: $(tr).html() });
 				}
 				r['portalName'] = $('td > div:eq(0)', tr).html();
 				return;
@@ -588,7 +632,7 @@ function parseBody(body) {
 					r['ownerName'] = ownerSpan.html() ? ownerSpan.html() : ownerSpan.text();
 					r['ownerFaction'] = spanToFaction(ownerSpan);
 				} else {
-					console.error({ func: 'parseBodyByDOM', error: 'Unknown format (status)', status: status.html(), i: i, tr: $(tr).html() });
+					console.error({ func: 'parseBody', error: 'Unknown format (status)', status: status.html(), i: i, tr: $(tr).html() });
 				}
 
 				result.push(r);
@@ -599,11 +643,11 @@ function parseBody(body) {
 				return;
 			}
 
-			console.error({ func: 'parseBodyByDOM', error: 'Unknown format (tr)', i: i, tr: $(tr).html() });
+			console.error({ func: 'parseBody', error: 'Unknown format (tr)', i: i, tr: $(tr).html() });
 		}
 	});
 
-	if (parserDebug) { console.log(['parseBodyByDOM', result.length, result]); }
+	if (parserDebug) { console.log(['parseBody', result.length, result]); }
 	return result;
 }
 
