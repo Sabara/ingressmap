@@ -210,24 +210,22 @@ function showStatus() {
 function showPortal(stats) {
 	var latitude = stats['latitude'];
 	var longitude = stats['longitude'];
-	var agentName = stats['agentName'];
-	var agentFaction = stats['agentFaction'];
-	var owners = stats['ownerName'];
-	var enemies = stats['enemyName'];
 	var hours = stats['hours'];
 	var days = stats['days'];
+	var enemyNames = stats['enemyNames'];
+	var isUPC = stats['isUPC'];
+	var damages = stats['damages'];
 
 	var portal = loadPortal(latitude, longitude);
 	var portalName = portal['portalName'];
 	var portalImageUrl = portal['portalImageUrl'];
 
 	var intelUrl = 'https://www.ingress.com/intel?ll=' + latitude + ',' + longitude + '&pll=' + latitude + ',' + longitude + '&z=19';
-	var isUPC = owners.some(function(owner) { return agentName == owner[0]; });
-	var color = isUPC ? 'red' : ('RES' == agentFaction ? '#3679B9' : '#428F43');
+	var color = isUPC ? 'red' : '#3679B9';
 	var titleText = decodeHTMLEntities(portalName) + (isUPC ? ' (UPC)' : '');
-	var enemyTable = '<table><thead><tr><td>Agent</td><td>#</td></tr></thead><tbody><tr><td>' + enemies.map(function(item) { return item[0] + '</td><td class="td_number">' + item[1]; }).join('</td></tr><tr><td>') + '</td></tr></tbody></table>';
-	var localHoursTable = '<table><thead><tr><td>Hour</td><td>#</td></tr></thead><tbody><tr><td class="td_number">' + hours.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return item.join('</td><td class="td_number">'); }).join('</td></tr><tr><td class="td_number">') + '</td></tr></tbody></table>';
-	var localDaysTable = '<table><thead><tr><td>Day</td><td>#</td></tr></thead><tbody><tr><td>' + days.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return toWeekDay(item[0]) + '</td><td class="td_number">' + item[1]; }).join('</td></tr><tr><td>') + '</td></tr></tbody></table>';
+	var enemyTable = '<table><thead><tr><td>Agent</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody><tr><td>' + enemyNames.map(function(item) { return item[0] + '</td><td class="td_number">' + item[1] + '</td><td class="td_number">' + item[2]; }).join('</td></tr><tr><td>') + '</td></tr></tbody></table>';
+	var localHoursTable = '<table><thead><tr><td>Hour</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody><tr><td class="td_number">' + hours.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return item.join('</td><td class="td_number">'); }).join('</td></tr><tr><td class="td_number">') + '</td></tr></tbody></table>';
+	var localDaysTable = '<table><thead><tr><td>Day</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody><tr><td>' + days.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return toWeekDay(item[0]) + '</td><td class="td_number">' + item[1] + '</td><td class="td_number">' + item[2]; }).join('</td></tr><tr><td>') + '</td></tr></tbody></table>';
 	var content = $('<div />').append($('<h3 />').html(portalName + (isUPC ? ' (<span style="color: red">UPC</span>)' : ''))).append($('<a />').addClass('portal_info').attr('href', intelUrl).attr('target', '_blank').append($('<img />').attr({ 'src': portalImageUrl }).addClass('portal_img'))).append($('<div />').addClass('portal_info').html(enemyTable)).append($('<div />').addClass('portal_info').html(localHoursTable)).append($('<div />').addClass('portal_info').html(localDaysTable));
 
 	var iconOpt = { path: google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: color, fillOpacity: 0.4, strokeColor: color, strokeWeight: 2 };
@@ -398,15 +396,15 @@ function generateConfigId(config) {
 }
 
 function isReportId(id) {
-	return !isPortalId(id) && !isConfigId(id);
+	return id && 'string' === typeof id && !isPortalId(id) && !isConfigId(id);
 }
 
 function isPortalId(id) {
-	return 0 == id.indexOf('p/');
+	return id && 'string' === typeof id && 0 == id.indexOf('p/');
 }
 
 function isConfigId(id) {
-	return 0 == id.indexOf('z/');
+	return id && 'string' === typeof id && 0 == id.indexOf('z/');
 }
 
 function loadAllReports() {
@@ -436,18 +434,29 @@ function printLocalStorage() {
 }
 
 function analyzeReports(reports) {
-	return mapReduce(reports, function(report) {
+	var statsPerPortalHourEnemy = mapReduce(reports, function(report) {
 		var d = new Date(report['time']);
-		return [[report['latitude'], report['longitude']], [report['agentName'], report['agentFaction'], report['ownerName'], report['enemyName'], d.getHours(), d.getDay()]];
+		var ymdh = d.getFullYear() * 1000000 + (1 + d.getMonth()) * 10000 + d.getDate() * 100 + d.getHours();
+		var isUPC = report['ownerName'] == report['agentName'];
+		return [[report['latitude'], report['longitude'], ymdh, d.getHours(), d.getDay(), report['enemyName']], [report['time'], isUPC]];
 	}, function(k, v) {
-		var agentNames = v.map(function(item) { return item[0]; });
-		var agentFactions = v.map(function(item) { return item[1]; });
-		var ownerNames = v.map(function(item) { return item[2]; });
-		var enemyNames = v.map(function(item) { return item[3]; });
-		var hours = v.map(function(item) { return item[4]; });
-		var days = v.map(function(item) { return item[5]; });
-		return { latitude: k[0], longitude: k[1], agentName: sortByValue(freq(agentNames))[0][0], agentFaction: sortByValue(freq(agentFactions))[0][0], ownerName: sortByValue(freq(ownerNames)), enemyName: sortByValue(freq(enemyNames)), hours: sortByValue(freq(hours)), days: sortByValue(freq(days)) };
+		var isUPC = v.map(function(item) { return item[1]; }).some(function(item) { return item; });
+		return { latitude: k[0], longitude: k[1], ymdh: k[2], hours: k[3], day: k[4], enemyName: k[5], damages: v.length, isUPC: isUPC };
 	});
+	var statsPerPortal = mapReduce(statsPerPortalHourEnemy, function(stats) {
+		return [[stats['latitude'], stats['longitude']], [stats['hours'], stats['day'], stats['enemyName'], stats['damages'], stats['isUPC']]];
+	}, function(k, v) {
+		var hoursPerHour = sortByValue(freq(v.map(function(item) { return item[0]; })));
+		var daysPerHour = sortByValue(freq(v.map(function(item) { return item[1]; })));
+		var enemyNamesPerHour = sortByValue(freq(v.map(function(item) { return item[2]; })));
+		var damages = v.map(function(item) { return item[3]; }).reduce(function(a, b) { return a + b; });
+		var isUPC = v.map(function(item) { return item[4]; }).some(function(item) { return item; });
+		var hoursTotal = sortByValue(freq(v.map(function(item) { return range(0, item[3]).map(function(i) { return item[0] }); }).reduce(function(a, b) { return a.concat(b); })));
+		var daysTotal = sortByValue(freq(v.map(function(item) { return range(0, item[3]).map(function(i) { return item[1] }); }).reduce(function(a, b) { return a.concat(b); })));
+		var enemyNamesTotal = sortByValue(freq(v.map(function(item) { return range(0, item[3]).map(function(i) { return item[2] }); }).reduce(function(a, b) { return a.concat(b); })));
+		return { latitude: k[0], longitude: k[1], hours: mergeFreqArray(hoursPerHour, hoursTotal), days: mergeFreqArray(daysPerHour, daysTotal), enemyNames: mergeFreqArray(enemyNamesPerHour, enemyNamesTotal), isUPC: isUPC, damages: damages };
+	});
+	return statsPerPortal;
 }
 
 function showMessage(mesg) {
@@ -687,6 +696,10 @@ function freq(seq) {
 	}, function (k, v) {
 		return [k, v.reduce(function(a, b) { return a + b; })];
 	});
+}
+
+function mergeFreqArray(main, sub) {
+	return main.map(function(m) { return m.concat([sub.filter(function(s) { return s[0] == m[0]; })[0][1]]); });
 }
 
 function sortByValue(seq) {
