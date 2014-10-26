@@ -77,22 +77,12 @@ $(document).ready(function() {
 });
 
 $(window).load(function() {
-    gapi.client.load('gmail', 'v1').then(function(response) { // sometimes this line got error in $(document).ready 
-    	gapi.auth.authorize({ client_id: clientId, scope: scopes, immediate: true}, handleAuthResult);
+	gapi.client.load('gmail', 'v1').then(function(response) { // sometimes this line got error in $(document).ready
+		gapi.auth.authorize({ client_id: clientId, scope: scopes, immediate: true}, handleAuthResult);
     }, function(response) {
 		console.error({ func: 'gapi.client.load.then', error: response.result.error.message });
     }, this);
 });
-
-function moveToCurrentPosition() {
-	// https://developer.mozilla.org/ja/docs/Web/API/Geolocation.getCurrentPosition
-	navigator.geolocation.getCurrentPosition(function(pos) {
-		googleMap.setCenter({lat: pos.coords.latitude, lng: pos.coords.longitude });
-		googleMap.setZoom(15);
-	}, function(e) {
-		console.error({ func: 'moveToCurrentPosition', error: 'failed to move to curernt position', e: e });
-	}, { enableHighAccuracy: true });
-}
 
 function handleAuthResult(authResult) {
     if (authResult && !authResult.error) {
@@ -149,6 +139,88 @@ function handleGmailResult(ids, response) {
 	});
 }
 
+function showAllPortals() {
+	var len = reportsLength();
+   	if (0 == len) {
+   		return;
+   	}
+	showMessage('Loading reports... (' + len + ')');
+   	var reports = loadAllReports();
+   	showMessage('Analyzing reports... (' + reports.length + ')');
+   	var stats = analyzeReports(reports);
+   	showMessage('Showing portals... (' + stats.length + ')');
+   	stats.forEach(showPortal);
+   	// printLocalStorage();
+}
+
+function showPortal(stats) {
+	var latitude = stats['latitude'];
+	var longitude = stats['longitude'];
+	var hours = stats['hours'];
+	var days = stats['days'];
+	var enemyNames = stats['enemyNames'];
+	var isLatest = stats['isLatest'];
+	var latests = stats['latests'];
+	var latestHours = latests.map(function(item) { return item['hours']; });
+	var latestDays = latests.map(function(item) { return item['days']; });
+	var latestEnemyNames = latests.map(function(item) { return item['enemyName']; });
+	var isUPC = stats['isUPC'];
+	var damages = stats['damages'];
+
+	var portal = loadPortal(latitude, longitude);
+	var portalName = portal['portalName'];
+	var portalImageUrl = portal['portalImageUrl'];
+
+	var intelUrl = 'https://www.ingress.com/intel?ll=' + latitude + ',' + longitude + '&pll=' + latitude + ',' + longitude + '&z=19';
+	var color = isUPC ? '#FF0000' : '#3679B9';
+	var titleText = decodeHTMLEntities(portalName) + (isUPC ? ' (UPC)' : '');
+	var enemyTable = '<table><thead><tr><td>Agent</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody>' + enemyNames.map(function(item) { return (-1 == latestEnemyNames.indexOf(item[0]) ? '<tr>' : '<tr class="tr_highlight">') + '<td>' + item[0] + '</td><td class="td_number">' + item[1] + '</td><td class="td_number">' + item[2] + '</td></tr>';  }).join('') + '</tbody></table>';
+	var hoursTable = '<table><thead><tr><td>Hour</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody>' + hours.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return (-1 == latestHours.indexOf(item[0]) ? '<tr>' : '<tr class="tr_highlight">') + '<td class="td_number">' + item.join('</td><td class="td_number">') + '</td></tr>'; }).join('') + '</tbody></table>';
+	var daysTable = '<table><thead><tr><td>Day</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody>' + days.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return (-1 == latestDays.indexOf(item[0]) ? '<tr>' : '<tr class="tr_highlight">') + '<td>' + toWeekDay(item[0]) + '</td><td class="td_number">' + item[1] + '</td><td class="td_number">' + item[2] + '</td></tr>'; }).join('') + '</tbody></table>';
+	var content = $('<div />').append($('<h3 />').html(portalName + (isUPC ? ' (<span style="color: red">UPC</span>)' : ''))).append($('<a />').addClass('portal_info').attr('href', intelUrl).attr('target', '_blank').append($('<img />').attr({ 'no_load_src': portalImageUrl }).addClass('portal_img'))).append($('<div />').addClass('portal_info').html(enemyTable)).append($('<div />').addClass('portal_info').html(hoursTable)).append($('<div />').addClass('portal_info').html(daysTable));
+
+	var iconOpt = { path: isLatest ? google.maps.SymbolPath.BACKWARD_CLOSED_ARROW : google.maps.SymbolPath.CIRCLE, scale: isLatest ? 5 : 10, fillColor: color, fillOpacity: 0.4, strokeColor: color, strokeWeight: 2 };
+	// var iconOpt = 'http://commondatastorage.googleapis.com/ingress.com/img/map_icons/marker_images/hum_8res.png';
+	var marker = new google.maps.Marker({ position: new google.maps.LatLng(latitude, longitude), map: googleMap, title: titleText, icon: iconOpt });
+	markers.push(marker); // global!!!
+	var infoWindow = new google.maps.InfoWindow({ content: content.html(), disableAutoPan: false, maxWidth: 640, noSupress: true });
+	infoWindows.push(infoWindow); // global!!!
+	if (isUPC) upcCount++; // global!!!
+	// https://developers.google.com/maps/documentation/javascript/examples/event-closure?hl=ja
+	// http://stackoverflow.com/questions/8909652/adding-click-event-listeners-in-loop
+	google.maps.event.addListener(marker, 'click', function(_marker, _infoWindow) { // closure
+		return function(event) {
+			closeInfoWindow();
+			_infoWindow.setContent(_infoWindow.getContent().replace(/no_load_src/gi, 'src')); // lazy img loading
+			_infoWindow.open(googleMap, _marker);
+			openedInfoWindow = _infoWindow; };
+	}(marker, infoWindow));
+}
+
+function clearAllPortals() {
+	closeInfoWindow();
+	infoWindows.forEach(function(infoWindow) {
+		google.maps.event.clearInstanceListeners(infoWindow);
+		infoWindow.close();
+	});
+	infoWindows = []; // global!!!
+	markers.forEach(function(marker) {
+		google.maps.event.clearInstanceListeners(marker);
+		marker.setMap(null);
+	});
+	markers = []; // global!!!
+	upcCount = 0; // global!!!
+}
+
+function showMessage(mesg) {
+	console.log(mesg);
+	$('#content').html(mesg + '<br />');
+}
+
+function showStatus() {
+   	showMessage('Ingress Damage Reports Map, Reports: ' + reportsLength() + ', Portals: ' + portalsLength() + ' (<span style="color: red">UPC: ' + upcCount + '</span>)');
+}
+
 ///
 /// Gmail
 ///
@@ -187,77 +259,6 @@ function gmailGet(ids, progressFunc, doneFunc) {
 	}, function(response) {
 		console.error({ func: 'gmailGet', error: response.result.error.message });
 	}, this);
-}
-
-function showAllPortals() {
-	var len = reportsLength();
-   	if (0 == len) {
-   		return;
-   	}
-	showMessage('Loading reports... (' + len + ')');
-   	var reports = loadAllReports();
-   	showMessage('Analyzing reports... (' + reports.length + ')');
-   	var stats = analyzeReports(reports);
-   	showMessage('Showing portals... (' + stats.length + ')');
-   	stats.forEach(showPortal);
-   	// printLocalStorage();
-}
-
-function showStatus() {
-   	showMessage('Ingress Damage Reports Map, Reports: ' + reportsLength() + ', Portals: ' + portalsLength() + ' (<span style="color: red">UPC: ' + upcCount + '</span>)');
-}
-
-function showPortal(stats) {
-	var latitude = stats['latitude'];
-	var longitude = stats['longitude'];
-	var hours = stats['hours'];
-	var days = stats['days'];
-	var enemyNames = stats['enemyNames'];
-	var isUPC = stats['isUPC'];
-	var damages = stats['damages'];
-
-	var portal = loadPortal(latitude, longitude);
-	var portalName = portal['portalName'];
-	var portalImageUrl = portal['portalImageUrl'];
-
-	var intelUrl = 'https://www.ingress.com/intel?ll=' + latitude + ',' + longitude + '&pll=' + latitude + ',' + longitude + '&z=19';
-	var color = isUPC ? 'red' : '#3679B9';
-	var titleText = decodeHTMLEntities(portalName) + (isUPC ? ' (UPC)' : '');
-	var enemyTable = '<table><thead><tr><td>Agent</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody><tr><td>' + enemyNames.map(function(item) { return item[0] + '</td><td class="td_number">' + item[1] + '</td><td class="td_number">' + item[2]; }).join('</td></tr><tr><td>') + '</td></tr></tbody></table>';
-	var localHoursTable = '<table><thead><tr><td>Hour</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody><tr><td class="td_number">' + hours.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return item.join('</td><td class="td_number">'); }).join('</td></tr><tr><td class="td_number">') + '</td></tr></tbody></table>';
-	var localDaysTable = '<table><thead><tr><td>Day</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody><tr><td>' + days.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return toWeekDay(item[0]) + '</td><td class="td_number">' + item[1] + '</td><td class="td_number">' + item[2]; }).join('</td></tr><tr><td>') + '</td></tr></tbody></table>';
-	var content = $('<div />').append($('<h3 />').html(portalName + (isUPC ? ' (<span style="color: red">UPC</span>)' : ''))).append($('<a />').addClass('portal_info').attr('href', intelUrl).attr('target', '_blank').append($('<img />').attr({ 'src': portalImageUrl }).addClass('portal_img'))).append($('<div />').addClass('portal_info').html(enemyTable)).append($('<div />').addClass('portal_info').html(localHoursTable)).append($('<div />').addClass('portal_info').html(localDaysTable));
-
-	var iconOpt = { path: google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: color, fillOpacity: 0.4, strokeColor: color, strokeWeight: 2 };
-	// var iconOpt = 'http://commondatastorage.googleapis.com/ingress.com/img/map_icons/marker_images/hum_8res.png';
-	var marker = new google.maps.Marker({ position: new google.maps.LatLng(latitude, longitude), map: googleMap, title: titleText, icon: iconOpt });
-	markers.push(marker); // global!!!
-	var infoWindow = new google.maps.InfoWindow({ content: content.html(), noSupress: true, maxWidth: 640 });
-	infoWindows.push(infoWindow); // global!!!
-	if (isUPC) upcCount++; // global!!!
-	// https://developers.google.com/maps/documentation/javascript/examples/event-closure?hl=ja
-	// http://stackoverflow.com/questions/8909652/adding-click-event-listeners-in-loop
-	google.maps.event.addListener(marker, 'click', function(_marker, _infoWindow) { // closure
-		return function(event) {
-			closeInfoWindow();
-			_infoWindow.open(googleMap, _marker);
-			openedInfoWindow = _infoWindow; };
-	}(marker, infoWindow));
-}
-
-function clearAllPortals() {
-	closeInfoWindow();
-	infoWindows.forEach(function(infoWindow) {
-		google.maps.event.clearInstanceListeners(infoWindow);
-		infoWindow.close();
-	});
-	infoWindows = []; // global!!!
-	markers.forEach(function(marker) {
-		google.maps.event.clearInstanceListeners(marker);
-		marker.setMap(null);
-	});
-	markers = []; // global!!!
-	upcCount = 0; // global!!!
 }
 
 ///
@@ -434,34 +435,34 @@ function printLocalStorage() {
 }
 
 function analyzeReports(reports) {
+	var now = Date.now();
 	var statsPerPortalHourEnemy = mapReduce(reports, function(report) {
 		var d = new Date(report['time']);
 		var ymdh = d.getFullYear() * 1000000 + (1 + d.getMonth()) * 10000 + d.getDate() * 100 + d.getHours();
+		var isLatest = 24.0 > (now - report['time']) / (1000.0 * 60 * 60.0); // latest 24h
 		var isUPC = report['ownerName'] == report['agentName'];
-		return [[report['latitude'], report['longitude'], ymdh, d.getHours(), d.getDay(), report['enemyName']], [report['time'], isUPC]];
+		return [[report['latitude'], report['longitude'], ymdh, d.getHours(), d.getDay(), report['enemyName']], [report['time'], isLatest, isUPC]];
 	}, function(k, v) {
-		var isUPC = v.map(function(item) { return item[1]; }).some(function(item) { return item; });
-		return { latitude: k[0], longitude: k[1], ymdh: k[2], hours: k[3], day: k[4], enemyName: k[5], damages: v.length, isUPC: isUPC };
+		var isLatest = v.map(function(item) { return item[1]; }).some(function(item) { return item; });
+		var isUPC = v.map(function(item) { return item[2]; }).some(function(item) { return item; });
+		return { latitude: k[0], longitude: k[1], ymdh: k[2], hours: k[3], day: k[4], enemyName: k[5], damages: v.length, isLatest: isLatest, isUPC: isUPC };
 	});
 	var statsPerPortal = mapReduce(statsPerPortalHourEnemy, function(stats) {
-		return [[stats['latitude'], stats['longitude']], [stats['hours'], stats['day'], stats['enemyName'], stats['damages'], stats['isUPC']]];
+		return [[stats['latitude'], stats['longitude']], [stats['hours'], stats['day'], stats['enemyName'], stats['damages'], stats['isLatest'], stats['isUPC']]];
 	}, function(k, v) {
 		var hoursPerHour = sortByValue(freq(v.map(function(item) { return item[0]; })));
 		var daysPerHour = sortByValue(freq(v.map(function(item) { return item[1]; })));
 		var enemyNamesPerHour = sortByValue(freq(v.map(function(item) { return item[2]; })));
 		var damages = v.map(function(item) { return item[3]; }).reduce(function(a, b) { return a + b; });
-		var isUPC = v.map(function(item) { return item[4]; }).some(function(item) { return item; });
+		var isLatest = v.map(function(item) { return item[4]; }).some(function(item) { return item; });
+		var latests = v.filter(function(item) { return item[4]; }).map(function(item) { return { hours: item[0], days: item[1], enemyName: item[2] }; });
+		var isUPC = v.map(function(item) { return item[5]; }).some(function(item) { return item; });
 		var hoursTotal = sortByValue(freq(v.map(function(item) { return range(0, item[3]).map(function(i) { return item[0] }); }).reduce(function(a, b) { return a.concat(b); })));
 		var daysTotal = sortByValue(freq(v.map(function(item) { return range(0, item[3]).map(function(i) { return item[1] }); }).reduce(function(a, b) { return a.concat(b); })));
 		var enemyNamesTotal = sortByValue(freq(v.map(function(item) { return range(0, item[3]).map(function(i) { return item[2] }); }).reduce(function(a, b) { return a.concat(b); })));
-		return { latitude: k[0], longitude: k[1], hours: mergeFreqArray(hoursPerHour, hoursTotal), days: mergeFreqArray(daysPerHour, daysTotal), enemyNames: mergeFreqArray(enemyNamesPerHour, enemyNamesTotal), isUPC: isUPC, damages: damages };
+		return { latitude: k[0], longitude: k[1], hours: mergeFreqArray(hoursPerHour, hoursTotal), days: mergeFreqArray(daysPerHour, daysTotal), enemyNames: mergeFreqArray(enemyNamesPerHour, enemyNamesTotal), damages: damages, isLatest: isLatest, isUPC: isUPC, latests: latests };
 	});
 	return statsPerPortal;
-}
-
-function showMessage(mesg) {
-	console.log(mesg);
-	$('#content').html(mesg + '<br />');
 }
 
 ///
@@ -483,21 +484,6 @@ function parseMail(id, header, body) {
 	}
 }
 
-function toWeekDay(day) {
-	var days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-	return days[day];
-}
-
-function colorToFaction(color) {
-	if ('#3679B9;' == color) {
-		return 'RES';
-	} else if ('#428F43;' == color) {
-		return 'ENL';
-	} else {
-		return '';
-	}
-}
-
 function parseHeader(headers) {
 	var names = ['From', 'To', 'Date', 'Subject'];
 	var result = {};
@@ -509,11 +495,6 @@ function parseHeader(headers) {
 		});
 	});
 	return names.every(function(name) { return name in result }) ? result : null;
-}
-
-function spanToFaction(span) {
-	var style = span.attr('style');
-	return style ? colorToFaction(style.substring('color: '.length)) : '';
 }
 
 function parseBody(body) {
@@ -660,6 +641,26 @@ function parseBody(body) {
 	return result;
 }
 
+function toWeekDay(day) {
+	var days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+	return days[day];
+}
+
+function colorToFaction(color) {
+	if ('#3679B9;' == color) {
+		return 'RES';
+	} else if ('#428F43;' == color) {
+		return 'ENL';
+	} else {
+		return '';
+	}
+}
+
+function spanToFaction(span) {
+	var style = span.attr('style');
+	return style ? colorToFaction(style.substring('color: '.length)) : '';
+}
+
 ///
 /// MapReduce
 ///
@@ -710,6 +711,16 @@ function sortByValue(seq) {
 ///
 /// utility
 ///
+function moveToCurrentPosition() {
+	// https://developer.mozilla.org/ja/docs/Web/API/Geolocation.getCurrentPosition
+	navigator.geolocation.getCurrentPosition(function(pos) {
+		googleMap.setCenter({lat: pos.coords.latitude, lng: pos.coords.longitude });
+		googleMap.setZoom(15);
+	}, function(e) {
+		console.error({ func: 'moveToCurrentPosition', error: 'failed to move to curernt position', e: e });
+	}, { enableHighAccuracy: true });
+}
+
 function disablePOIInfoWindow() {
 	// remove popup bubbles of POI
 	// http://stackoverflow.com/questions/7950030/can-i-remove-just-the-popup-bubbles-of-pois-in-google-maps-api-v3/19710396#19710396
@@ -732,20 +743,6 @@ function closeInfoWindow() {
 	}
 }
 
-function urlsafe_b64_to_utf8(str) {
-	// https://gist.github.com/jhurliman/1250118
-	str = str.replace(/-/g, '+').replace(/_/g, '/');
-	while (str.length % 4) {
-		str += '=';
-	}
-	return b64_to_utf8(str);
-}
-
-function b64_to_utf8(str) {
-	// https://developer.mozilla.org/ja/docs/Web/API/window.btoa
-	return decodeURIComponent(escape(window.atob(str)));
-}
-
 function decodeHTMLEntities(str) {
 	// http://stackoverflow.com/questions/5796718/html-entity-decode
 	// FIXME: textarea is XSS safe or not?
@@ -758,4 +755,18 @@ function range(start, end) {
 		result.push(i);
 	}
 	return result;
+}
+
+function b64_to_utf8(str) {
+	// https://developer.mozilla.org/ja/docs/Web/API/window.btoa
+	return decodeURIComponent(escape(window.atob(str)));
+}
+
+function urlsafe_b64_to_utf8(str) {
+	// https://gist.github.com/jhurliman/1250118
+	str = str.replace(/-/g, '+').replace(/_/g, '/');
+	while (str.length % 4) {
+		str += '=';
+	}
+	return b64_to_utf8(str);
 }
