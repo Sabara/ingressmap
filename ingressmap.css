@@ -83,6 +83,10 @@ tr {
   	border: 1px solid #111111;
 }
 
+.tr_highlight {
+	background-color: #ffff00;
+}
+
 tr:hover {
   	background: #eeeeee;
 }
