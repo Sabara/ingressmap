@@ -50,21 +50,8 @@ $(document).ready(function() {
 
 	// printLocalStorage();
 
-	var mapOpt = {
-		center: { lat: 35.681382, lng: 139.766084 }, // Tokyo Station
-		zoom: 10,
-		mapTypeId: google.maps.MapTypeId.ROADMAP,
-		panControl: false,
-		zoomControl: true,
-		zoomControlOptions: {
-			style: google.maps.ZoomControlStyle.LARGE,
-			position: google.maps.ControlPosition.RIGHT_CENTER
-		},
-		streetViewControl: true,
-		streetViewControlOptions: {
-			position: google.maps.ControlPosition.RIGHT_CENTER
-		}
-	};
+	// (35.681382, 139.766084) == Tokyo Station
+	var mapOpt = { center: { lat: 35.681382, lng: 139.766084 }, zoom: 10, mapTypeId: google.maps.MapTypeId.ROADMAP, panControl: false, zoomControl: true, zoomControlOptions: { style: google.maps.ZoomControlStyle.LARGE, position: google.maps.ControlPosition.RIGHT_CENTER }, streetViewControl: true, streetViewControlOptions: { position: google.maps.ControlPosition.RIGHT_CENTER } };
 	// http://stackoverflow.com/questions/8483023/uncaught-typeerror-cannot-set-property-position-of-undefined
 	googleMap = new google.maps.Map($('#map_canvas')[0], mapOpt); // !!! global
 	// http://googlemaps.googlermania.com/google_maps_api_v3/ja/map_example_singleInfoWindow.html
@@ -79,34 +66,34 @@ $(document).ready(function() {
 $(window).load(function() {
 	gapi.client.load('gmail', 'v1').then(function(response) { // sometimes this line got error in $(document).ready
 		gapi.auth.authorize({ client_id: clientId, scope: scopes, immediate: true}, handleAuthResult);
-    }, function(response) {
+	}, function(response) {
 		console.error({ func: 'gapi.client.load.then', error: response.result.error.message });
-    }, this);
+	}, this);
 });
 
 function handleAuthResult(authResult) {
-    if (authResult && !authResult.error) {
-    	$('#content').off('click');
-        gmailList('', maxLoop, [], function(ids) {
-        	showMessage('Loading mail ID from Gmail... (' + (maxLoop * maxResults - ids.length) + ')');
-        }, function(ids) {
-        	var newIds = ids.filter(function(id) { return !isExistReport(generateReportId(id, 0)); }).reverse(); // sort by time (older first)
-        	if (newIds && 0 != newIds.length) {
-        		gmailGet(newIds, handleGmailResult, function(ids, response) {
-        			clearAllPortals();
-        			showAllPortals();
-        		   	showStatus();
-        		});
-        	} else {
-        	   	showStatus();
-        	}
-        });
-    } else {
-    	showMessage('Please click here to authorize Gmail API (OAuth 2.0)');
-    	$('#content').on('click', function(event) {
-    		gapi.auth.authorize({ client_id: clientId, scope: scopes, immediate: false }, handleAuthResult);
-    	});
-    }
+	if (authResult && !authResult.error) {
+		$('#content').off('click');
+		gmailList('', maxLoop, [], function(ids) {
+			showMessage('Loading mail ID from Gmail... (' + (maxLoop * maxResults - ids.length) + ')');
+		}, function(ids) {
+			var newIds = ids.filter(function(id) { return !isExistReport(generateReportId(id, 0)); }).reverse(); // sort by time (older first)
+			if (newIds && 0 != newIds.length) {
+				gmailGet(newIds, handleGmailResult, function(ids, response) {
+					clearAllPortals();
+					showAllPortals();
+					showStatus();
+				});
+			} else {
+				showStatus();
+			}
+		});
+	} else {
+		showMessage('Please click here to authorize Gmail API (OAuth 2.0)');
+		$('#content').on('click', function(event) {
+			gapi.auth.authorize({ client_id: clientId, scope: scopes, immediate: false }, handleAuthResult);
+		});
+	}
 }
 
 function handleGmailResult(ids, response) {
@@ -122,11 +109,7 @@ function handleGmailResult(ids, response) {
 					console.error({ func: 'handleGmailResult', error: 'failed to parse mail', id: id, result: result });
 				} else {
 					parsedMails.forEach(function(parsedMail) {
-						saveReport(parsedMail['reportId'], parsedMail['time'],
-								   parsedMail['latitude'], parsedMail['longitude'],
-								   parsedMail['agentName'], parsedMail['agentFaction'], parsedMail['agentLevel'],
-								   parsedMail['ownerName'], parsedMail['ownerFaction'],
-								   parsedMail['enemyName'], parsedMail['enemyFaction']);
+						saveReport(parsedMail['reportId'], parsedMail['time'], parsedMail['latitude'], parsedMail['longitude'], parsedMail['agentName'], parsedMail['agentFaction'], parsedMail['agentLevel'], parsedMail['ownerName'], parsedMail['ownerFaction'], parsedMail['enemyName'], parsedMail['enemyFaction']);
 						savePortal(parsedMail['latitude'], parsedMail['longitude'], parsedMail['time'], parsedMail['portalName'], parsedMail['portalImageUrl']);
 					});
 				}
@@ -174,7 +157,7 @@ function showPortal(stats) {
 	var intelUrl = 'https://www.ingress.com/intel?ll=' + latitude + ',' + longitude + '&pll=' + latitude + ',' + longitude + '&z=19';
 	var color = isUPC ? '#FF0000' : '#3679B9';
 	var titleText = decodeHTMLEntities(portalName) + (isUPC ? ' (UPC)' : '');
-	var enemyTable = '<table><thead><tr><td>Agent</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody>' + enemyNames.map(function(item) { return (-1 == latestEnemyNames.indexOf(item[0]) ? '<tr>' : '<tr class="tr_highlight">') + '<td>' + item[0] + '</td><td class="td_number">' + item[1] + '</td><td class="td_number">' + item[2] + '</td></tr>';  }).join('') + '</tbody></table>';
+	var enemyTable = '<table><thead><tr><td>Agent</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody>' + enemyNames.map(function(item) { return '<tr' + (-1 == latestEnemyNames.indexOf(item[0]) ? '' : ' class="tr_highlight"') + ' title="' + decodeHTMLEntities(item[0]) + '"><td>' + anonymize(item[0]) + '</td><td class="td_number">' + item[1] + '</td><td class="td_number">' + item[2] + '</td></tr>';  }).join('') + '</tbody></table>';
 	var hoursTable = '<table><thead><tr><td>Hour</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody>' + hours.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return (-1 == latestHours.indexOf(item[0]) ? '<tr>' : '<tr class="tr_highlight">') + '<td class="td_number">' + item.join('</td><td class="td_number">') + '</td></tr>'; }).join('') + '</tbody></table>';
 	var daysTable = '<table><thead><tr><td>Day</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody>' + days.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return (-1 == latestDays.indexOf(item[0]) ? '<tr>' : '<tr class="tr_highlight">') + '<td>' + toWeekDay(item[0]) + '</td><td class="td_number">' + item[1] + '</td><td class="td_number">' + item[2] + '</td></tr>'; }).join('') + '</tbody></table>';
 	var content = $('<div />').append($('<h3 />').html(portalName + (isUPC ? ' (<span style="color: red">UPC</span>)' : ''))).append($('<a />').addClass('portal_info').attr('href', intelUrl).attr('target', '_blank').append($('<img />').attr({ 'no_load_src': portalImageUrl }).addClass('portal_img'))).append($('<div />').addClass('portal_info').html(enemyTable)).append($('<div />').addClass('portal_info').html(hoursTable)).append($('<div />').addClass('portal_info').html(daysTable));
@@ -191,7 +174,7 @@ function showPortal(stats) {
 	google.maps.event.addListener(marker, 'click', function(_marker, _infoWindow) { // closure
 		return function(event) {
 			closeInfoWindow();
-			_infoWindow.setContent(_infoWindow.getContent().replace(/no_load_src/gi, 'src')); // lazy img loading
+			_infoWindow.setContent(_infoWindow.getContent().replace(/<img no_load_src=/gi, '<img src=')); // lazy img loading
 			_infoWindow.open(googleMap, _marker);
 			openedInfoWindow = _infoWindow; };
 	}(marker, infoWindow));
@@ -381,7 +364,7 @@ function loadPortal(latitude, longitude) {
 
 function isExistReport(reportId) {
 	var jsonString = localStorage.getItem(reportId);
-	return jsonString && 'string' === typeof jsonString && 0 < jsonString.length; // FIXME: need more restrict check?
+	return jsonString && 'string' === typeof jsonString && 0 < jsonString.length;
 }
 
 function generateReportId(gmailId, n) {
@@ -506,7 +489,8 @@ function parseBody(body) {
 
 	// http://stackoverflow.com/questions/15150264/jquery-how-to-stop-auto-load-imges-when-parsehtml
 	// replace <img src="..."> to <img no_load_src="..."> to stop auto load image 
-	body = body.replace(/<img [^>]*src=['"]([^'"]+)[^>]*>/gi, function(match, capture) { return '<img no_load_src="' + capture + '" />';})
+	body = body.replace(/<img src=/gi, '<img no_load_src=');
+	console.log(body);
 	var div = $.parseHTML(body);
 	// console.log(div);
 
@@ -747,6 +731,12 @@ function decodeHTMLEntities(str) {
 	// http://stackoverflow.com/questions/5796718/html-entity-decode
 	// FIXME: textarea is XSS safe or not?
 	return $('<textarea />').html(str).text();
+}
+
+function anonymize(str) {
+	var n = 3;
+	// return n >= str.length ? str + '*' : str.slice(0, n) + range(0, str.length - n).map(function(i) { return '*'; }).join('');
+	return (n >= str.length ? str : str.slice(0, n)) + '*';
 }
 
 function range(start, end) {
