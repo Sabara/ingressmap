@@ -35,14 +35,14 @@ body {
 
 #panel {
 	position: absolute;
-    top: 5px;
-    left: 5px;
-    margin-left: 0px;
-    z-index: 5;
-    /* background-color: transparent; */
-    background-color: #fff;
-    padding: 5px;
-    border: 1px solid #999;
+	top: 5px;
+	left: 5px;
+	margin-left: 0px;
+	z-index: 5;
+	/* background-color: transparent; */
+	background-color: #fff;
+	padding: 5px;
+	border: 1px solid #999;
 }
 
 .portal_info {
