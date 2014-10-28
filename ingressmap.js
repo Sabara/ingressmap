@@ -29,6 +29,7 @@ var q = 'subject:"Ingress Damage Report: Entities attacked by" from:ingress-supp
 var maxLoop = 100;
 var parserDebug = false;
 var version = '0.1';
+var maxEnemyNames = 20;
 
 ///
 /// global variable
@@ -157,7 +158,7 @@ function showPortal(stats) {
 	var intelUrl = 'https://www.ingress.com/intel?ll=' + latitude + ',' + longitude + '&pll=' + latitude + ',' + longitude + '&z=19';
 	var color = isUPC ? '#FF0000' : '#3679B9';
 	var titleText = decodeHTMLEntities(portalName) + (isUPC ? ' (UPC)' : '');
-	var enemyTable = '<table><thead><tr><td>Agent</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody>' + enemyNames.map(function(item) { return '<tr' + (-1 == latestEnemyNames.indexOf(item[0]) ? '' : ' class="tr_highlight"') + '><td>' + anonymize(item[0]) + '</td><td class="td_number">' + item[1] + '</td><td class="td_number">' + item[2] + '</td></tr>';  }).join('') + '</tbody></table>';
+	var enemyTable = generateEnemyTable(enemyNames, latestEnemyNames);
 	var hoursTable = '<table><thead><tr><td>Hour</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody>' + hours.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return (-1 == latestHours.indexOf(item[0]) ? '<tr>' : '<tr class="tr_highlight">') + '<td class="td_number">' + item.join('</td><td class="td_number">') + '</td></tr>'; }).join('') + '</tbody></table>';
 	var daysTable = '<table><thead><tr><td>Day</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody>' + days.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return (-1 == latestDays.indexOf(item[0]) ? '<tr>' : '<tr class="tr_highlight">') + '<td>' + toWeekDay(item[0]) + '</td><td class="td_number">' + item[1] + '</td><td class="td_number">' + item[2] + '</td></tr>'; }).join('') + '</tbody></table>';
 	var content = $('<div />').append($('<h3 />').html(portalName + (isUPC ? ' (<span style="color: red">UPC</span>)' : ''))).append($('<a />').addClass('portal_info').attr('href', intelUrl).attr('target', '_blank').append($('<img />').attr({ 'no_load_src': portalImageUrl }).addClass('portal_img'))).append($('<div />').addClass('portal_info').html(enemyTable)).append($('<div />').addClass('portal_info').html(hoursTable)).append($('<div />').addClass('portal_info').html(daysTable));
@@ -193,6 +194,14 @@ function clearAllPortals() {
 	});
 	markers = []; // global!!!
 	upcCount = 0; // global!!!
+}
+
+function generateEnemyTable(enemyNames, latestEnemyNames) {
+	var enemies = enemyNames.map(function(item) { return [-1 == latestEnemyNames.indexOf(item[0]) ? false : true, anonymize(item[0]), item[1], item[2]]; });
+	if (maxEnemyNames < enemies.length) {
+		enemies = enemies.slice(0, maxEnemyNames).concat([enemies.slice(maxEnemyNames).reduce(function(a, b) { return [a[0] || b[0], 'etc.', a[2] + b[2], a[3] + b[3]]; }, [false, 'etc.', 0, 0])]);
+	}
+	return '<table><thead><tr><td>Agent</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody>' + enemies.map(function(item) { return '<tr' + (item[0] ? ' class="tr_highlight"' : '') + '><td>' + item[1] + '</td><td class="td_number">' + item[2] + '</td><td class="td_number">' + item[3] + '</td></tr>';  }).join('') + '</tbody></table>';
 }
 
 function showMessage(mesg) {
@@ -415,6 +424,20 @@ function printLocalStorage() {
 		// console.log([i, k, v ? v.length : v]);
 		console.log([i, k, v]);
 	}
+}
+
+function printPortals() {
+	var portals = [];
+	for (var i = 0; i < localStorage.length; i++){
+		var k = localStorage.key(i);
+		if (isPortalId(k)) {
+			var v = JSON.parse(localStorage.getItem(k));
+			portals.push([v[0], v[1], v[3]]);
+		}
+	}
+	portals.forEach(function(portal) {
+		console.log(portal.join(',') + ',');
+	});
 }
 
 function analyzeReports(reports) {
@@ -733,7 +756,7 @@ function decodeHTMLEntities(str) {
 }
 
 function anonymize(str) {
-	var n = 3;
+	var n = 1;
 	// return n >= str.length ? str + '*' : str.slice(0, n) + range(0, str.length - n).map(function(i) { return '*'; }).join('');
 	return (n >= str.length ? str : str.slice(0, n)) + '*';
 }
