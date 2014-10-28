@@ -157,14 +157,14 @@ function showPortal(stats) {
 	var intelUrl = 'https://www.ingress.com/intel?ll=' + latitude + ',' + longitude + '&pll=' + latitude + ',' + longitude + '&z=19';
 	var color = isUPC ? '#FF0000' : '#3679B9';
 	var titleText = decodeHTMLEntities(portalName) + (isUPC ? ' (UPC)' : '');
-	var enemyTable = '<table><thead><tr><td>Agent</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody>' + enemyNames.map(function(item) { return '<tr' + (-1 == latestEnemyNames.indexOf(item[0]) ? '' : ' class="tr_highlight"') + ' title="' + decodeHTMLEntities(item[0]) + '"><td>' + anonymize(item[0]) + '</td><td class="td_number">' + item[1] + '</td><td class="td_number">' + item[2] + '</td></tr>';  }).join('') + '</tbody></table>';
+	var enemyTable = '<table><thead><tr><td>Agent</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody>' + enemyNames.map(function(item) { return '<tr' + (-1 == latestEnemyNames.indexOf(item[0]) ? '' : ' class="tr_highlight"') + '><td>' + anonymize(item[0]) + '</td><td class="td_number">' + item[1] + '</td><td class="td_number">' + item[2] + '</td></tr>';  }).join('') + '</tbody></table>';
 	var hoursTable = '<table><thead><tr><td>Hour</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody>' + hours.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return (-1 == latestHours.indexOf(item[0]) ? '<tr>' : '<tr class="tr_highlight">') + '<td class="td_number">' + item.join('</td><td class="td_number">') + '</td></tr>'; }).join('') + '</tbody></table>';
 	var daysTable = '<table><thead><tr><td>Day</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody>' + days.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return (-1 == latestDays.indexOf(item[0]) ? '<tr>' : '<tr class="tr_highlight">') + '<td>' + toWeekDay(item[0]) + '</td><td class="td_number">' + item[1] + '</td><td class="td_number">' + item[2] + '</td></tr>'; }).join('') + '</tbody></table>';
 	var content = $('<div />').append($('<h3 />').html(portalName + (isUPC ? ' (<span style="color: red">UPC</span>)' : ''))).append($('<a />').addClass('portal_info').attr('href', intelUrl).attr('target', '_blank').append($('<img />').attr({ 'no_load_src': portalImageUrl }).addClass('portal_img'))).append($('<div />').addClass('portal_info').html(enemyTable)).append($('<div />').addClass('portal_info').html(hoursTable)).append($('<div />').addClass('portal_info').html(daysTable));
 
 	var iconOpt = { path: isLatest ? google.maps.SymbolPath.BACKWARD_CLOSED_ARROW : google.maps.SymbolPath.CIRCLE, scale: isLatest ? 5 : 10, fillColor: color, fillOpacity: 0.4, strokeColor: color, strokeWeight: 2 };
 	// var iconOpt = 'http://commondatastorage.googleapis.com/ingress.com/img/map_icons/marker_images/hum_8res.png';
-	var marker = new google.maps.Marker({ position: new google.maps.LatLng(latitude, longitude), map: googleMap, title: titleText, icon: iconOpt });
+	var marker = new google.maps.Marker({ position: new google.maps.LatLng(latitude, longitude), map: googleMap, title: titleText, icon: iconOpt, zIndex: 10 });
 	markers.push(marker); // global!!!
 	var infoWindow = new google.maps.InfoWindow({ content: content.html(), disableAutoPan: false, maxWidth: 640, noSupress: true });
 	infoWindows.push(infoWindow); // global!!!
@@ -490,7 +490,6 @@ function parseBody(body) {
 	// http://stackoverflow.com/questions/15150264/jquery-how-to-stop-auto-load-imges-when-parsehtml
 	// replace <img src="..."> to <img no_load_src="..."> to stop auto load image 
 	body = body.replace(/<img src=/gi, '<img no_load_src=');
-	console.log(body);
 	var div = $.parseHTML(body);
 	// console.log(div);
 
