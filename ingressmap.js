@@ -58,6 +58,10 @@ $(document).ready(function() {
 	// http://googlemaps.googlermania.com/google_maps_api_v3/ja/map_example_singleInfoWindow.html
 	google.maps.event.addListener(googleMap, 'click', function(event) { closeInfoWindow(); });
 
+	var currentPositionDiv = $('<div />').html('&#9673;').attr('title', 'Go to current position').attr('id', 'current_position'); // &#9673; == http://ja.wikipedia.org/wiki/%E8%9B%87%E3%81%AE%E7%9B%AE
+	google.maps.event.addDomListener(currentPositionDiv[0], 'click', moveToCurrentPosition);
+	googleMap.controls[google.maps.ControlPosition.RIGHT_CENTER].push(currentPositionDiv[0]);
+
 	moveToCurrentPosition();
 
 	showAllPortals();
@@ -163,7 +167,7 @@ function showPortal(stats) {
 	var daysTable = '<table><thead><tr><td>Day</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody>' + days.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return (-1 == latestDays.indexOf(item[0]) ? '<tr>' : '<tr class="tr_highlight">') + '<td>' + toWeekDay(item[0]) + '</td><td class="td_number">' + item[1] + '</td><td class="td_number">' + item[2] + '</td></tr>'; }).join('') + '</tbody></table>';
 	var content = $('<div />').append($('<h3 />').html(portalName + (isUPC ? ' (<span style="color: red">UPC</span>)' : ''))).append($('<a />').addClass('portal_info').attr('href', intelUrl).attr('target', '_blank').append($('<img />').attr({ 'no_load_src': portalImageUrl }).addClass('portal_img'))).append($('<div />').addClass('portal_info').html(enemyTable)).append($('<div />').addClass('portal_info').html(hoursTable)).append($('<div />').addClass('portal_info').html(daysTable));
 
-	var iconOpt = { path: isLatest ? google.maps.SymbolPath.BACKWARD_CLOSED_ARROW : google.maps.SymbolPath.CIRCLE, scale: isLatest ? 5 : 10, fillColor: color, fillOpacity: 0.4, strokeColor: color, strokeWeight: 2 };
+	var iconOpt = { path: isLatest ? google.maps.SymbolPath.BACKWARD_CLOSED_ARROW : google.maps.SymbolPath.CIRCLE, scale: isLatest ? 5 : 10, fillColor: color, fillOpacity: 0.4, strokeColor: color, strokeWeight: 2, strokeOpacity: 0.8 };
 	// var iconOpt = 'http://commondatastorage.googleapis.com/ingress.com/img/map_icons/marker_images/hum_8res.png';
 	var marker = new google.maps.Marker({ position: new google.maps.LatLng(latitude, longitude), map: googleMap, title: titleText, icon: iconOpt, zIndex: 10 });
 	markers.push(marker); // global!!!
