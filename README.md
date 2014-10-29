@@ -26,6 +26,8 @@ http://ingress.xii.jp/
 
 右のズームスライダの下にある二重丸を押すと現在地に移動します(起動時にも現在地に移動します)。
 
+iOS の場合は Safari のメニューから「ホーム画面に追加」をしてホーム画面から起動すると全画面表示が出来ます。初回起動時に認証で画面が進まなくなりますがアプリを再起動すると通常通り使えます。
+
 もし Gmail API の承認を取り消したい場合は以下のページから Ingress Damage Reports Map のアクセス権を取り消してください。
 
 https://security.google.com/settings/security/permissions
