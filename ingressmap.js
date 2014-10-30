@@ -60,7 +60,7 @@ $(document).ready(function() {
 
 	var currentPositionDiv = $('<div />').html('&#9673;').attr('title', 'Go to current position').attr('id', 'current_position'); // &#9673; == http://ja.wikipedia.org/wiki/%E8%9B%87%E3%81%AE%E7%9B%AE
 	google.maps.event.addDomListener(currentPositionDiv[0], 'click', moveToCurrentPosition);
-	googleMap.controls[google.maps.ControlPosition.RIGHT_CENTER].push(currentPositionDiv[0]);
+	googleMap.controls[google.maps.ControlPosition.RIGHT_TOP].push(currentPositionDiv[0]);
 
 	moveToCurrentPosition();
 
@@ -156,12 +156,12 @@ function showPortal(stats) {
 	var damages = stats['damages'];
 
 	var portal = loadPortal(latitude, longitude);
-	var portalName = portal['portalName'];
+	var portalName = decodeHTMLEntities(portal['portalName']);
 	var portalImageUrl = portal['portalImageUrl'];
 
 	var intelUrl = 'https://www.ingress.com/intel?ll=' + latitude + ',' + longitude + '&pll=' + latitude + ',' + longitude + '&z=19';
 	var color = isUPC ? '#FF0000' : '#3679B9';
-	var titleText = decodeHTMLEntities(portalName) + (isUPC ? ' (UPC)' : '');
+	var titleText = portalName + (isUPC ? ' (UPC)' : '');
 	var enemyTable = generateEnemyTable(enemyNames, latestEnemyNames);
 	var hoursTable = '<table><thead><tr><td>Hour</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody>' + hours.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return (-1 == latestHours.indexOf(item[0]) ? '<tr>' : '<tr class="tr_highlight">') + '<td class="td_number">' + item.join('</td><td class="td_number">') + '</td></tr>'; }).join('') + '</tbody></table>';
 	var daysTable = '<table><thead><tr><td>Day</td><td title="Unique users per hour">U</td><td title="Damages">#</td></tr></thead><tbody>' + days.sort(function(a, b) { return a[0] - b[0]; }).map(function(item) { return (-1 == latestDays.indexOf(item[0]) ? '<tr>' : '<tr class="tr_highlight">') + '<td>' + toWeekDay(item[0]) + '</td><td class="td_number">' + item[1] + '</td><td class="td_number">' + item[2] + '</td></tr>'; }).join('') + '</tbody></table>';
@@ -436,12 +436,17 @@ function printPortals() {
 		var k = localStorage.key(i);
 		if (isPortalId(k)) {
 			var v = JSON.parse(localStorage.getItem(k));
-			portals.push([v[0], v[1], v[3]]);
+			portals.push([v[0], v[1], decodeHTMLEntities(v[3])]);
 		}
 	}
 	portals.forEach(function(portal) {
-		console.log(portal.join(',') + ',');
+		console.log(portal.map(escapeCSV).join(',') + ',');
 	});
+}
+
+function escapeCSV(item) {
+	var esc = item.replace(/"/g, '""');
+	return esc.match(/[,\n"]/) ? '"' + esc + '"' : esc;
 }
 
 function analyzeReports(reports) {
@@ -552,7 +557,7 @@ function parseBody(body) {
 			if (0 != portal.length) {
 				if (parserDebug) { console.log([i, 'portal', portal.length, $(tr).html()]); }
 				// r['portalAddress'] = portal.html();
-				var intel_pat = /^http.*&pll=(.+?),(.+?)&z=\d+$/;
+				var intel_pat = /^http.*&pll=([\-\.\d]+?),([\-\.\d]+?)&z=\d+$/;
 				var m = intel_pat.exec(portal.attr('href'));
 				if (null != m) {
 					r['latitude'] = m[1]; r['longitude'] = m[2];
@@ -567,9 +572,14 @@ function parseBody(body) {
 			var image = $('td > div[style="width:1000px;"] > div[style*="height: 160px"] > img', tr);
 			if (2 == image.length) {
 				if (parserDebug) { console.log([i, 'image', image.length, $(tr).html()]); }
-				// r['portalImageUrl'] = $(image[0]).attr('src');
-				r['portalImageUrl'] = $(image[0]).attr('no_load_src');
-				// r['mapImageUrl'] = $(image[1]).attr('src');
+				var img_pat = /^http(s)?:\/\//;
+				var m = img_pat.exec($(image[0]).attr('no_load_src'));
+				if (null != m) {
+					r['portalImageUrl'] = $(image[0]).attr('no_load_src');
+					// r['mapImageUrl'] = $(image[1]).attr('no_load_src');
+				} else {
+					console.error({ func: 'parseBody', error: 'Unknown format (image url)', img: $(image[0]).attr('no_load_src'), i: i, tr: $(tr).html() });
+				}
 				return;
 			}
 
