@@ -28,7 +28,7 @@ var maxResults = 100;
 var q = 'subject:"Ingress Damage Report: Entities attacked by" from:ingress-support@google.com';
 var maxLoop = 100;
 var parserDebug = false;
-var version = '0.1';
+var version = '0.2';
 var maxEnemyNames = 20;
 
 ///
@@ -108,7 +108,7 @@ function handleGmailResult(ids, response) {
 			// FIXME: error handling if headers missing
 			if (result && !result.error) {
 				var header = result['payload']['headers'];
-				var body = result['payload']['parts'][1]['body']['data'];
+				var body = result['payload']['parts'][1]['body']['data']; // 0 == text part, 1 == HTML part
 				var parsedMails = parseMail(id, header, urlsafe_b64_to_utf8(body));
 				if (null == parsedMails) {
 					console.error({ func: 'handleGmailResult', error: 'failed to parse mail', id: id, result: result });
@@ -119,7 +119,7 @@ function handleGmailResult(ids, response) {
 					});
 				}
 			} else {
-				console.error({ func: 'handleGmailResult', error: 'failed to get message from Gmail', id: id, result: result });
+				console.error({ func: 'handleGmailResult', error: 'failed to get message from Gmail', id: id, e: result.error });
 			}
 		} catch (e) {
 			console.error({ func: 'handleGmailResult', error: e, id: id, result: result });
@@ -224,7 +224,7 @@ function gmailList(pageToken, loop, ids, progressFunc, doneFunc) {
 	if (0 >= loop || null == pageToken) {
 		return doneFunc(ids);;
 	}
- 	gapi.client.gmail.users.messages.list({'userId': userId, 'maxResults': maxResults, 'q': q, 'pageToken': pageToken}).then(function(response) {
+	gapi.client.gmail.users.messages.list({ userId: userId, maxResults: maxResults, q: q, pageToken: pageToken, fields: 'nextPageToken,messages/id' }).then(function(response) {
  		if ('messages' in response.result && 0 != response.result.messages.length) {
 	 		response.result.messages.forEach(function(mesg) {
 	 			ids.push(mesg['id']);
@@ -246,7 +246,7 @@ function gmailGet(ids, progressFunc, doneFunc) {
 	var rest = ids.slice(maxResults);
 	var batch = gapi.client.newBatch();
 	head.forEach(function(id) {
-		batch.add(gapi.client.gmail.users.messages.get({ userId: userId, id: id }), { id: id });
+		batch.add(gapi.client.gmail.users.messages.get({ userId: userId, id: id, fields: 'payload(headers,parts/body)' }), { id: id });
 	});
 	showMessage('Loading mail body from Gmail... (' + ids.length + ')');
 	batch.then(function(response) {
@@ -272,19 +272,6 @@ function initLocalStorage() {
 	}
 }
 
-function savePortal(latitude, longitude, time, portalName, portalImageUrl) {
-	var oldPortal = localStorage.getItem(generatePortalId(latitude, longitude));
-	if (oldPortal && 'string' === typeof oldPortal && 0 < oldPortal.length) {
-		var portal = JSON.parse(oldPortal);
-		if (time < portal[2]) {
-			return false;
-		}
-	}
-	var newPortal = JSON.stringify([latitude, longitude, time, portalName, portalImageUrl]);
-	localStorage.setItem(generatePortalId(latitude, longitude), newPortal);
-	return true;
-}
-
 function reportsLength() {
 	var len = 0;
 	for (var i = 0; i < localStorage.length; i++){
@@ -302,13 +289,13 @@ function portalsLength() {
 }
 
 function saveReport(reportId, time, latitude, longitude, agentName, agentFaction, agentLevel, ownerName, ownerFaction, enemyName, enemyFaction) {
-	if (reportId && 'string' === typeof reportId && 0 < reportId.length) { 
+	if (isReportId(reportId)) {
 		//var dummy = ''; // dummy big data
 		//for (var i = 0; i < 500 * 1024; i++) {
 		//	dummy += 'x';
 		//}
 		//report['dummy'] = dummy;
-		var jsonString = JSON.stringify([reportId, time, latitude, longitude, agentName, agentFaction, agentLevel, ownerName, ownerFaction, enemyName, enemyFaction]);
+		var jsonString = JSON.stringify([time, reportId, latitude, longitude, agentName, agentFaction, agentLevel, ownerName, ownerFaction, enemyName, enemyFaction]);
 		try {
 			localStorage.setItem(reportId, jsonString);
 			return true;
@@ -332,10 +319,36 @@ function saveReport(reportId, time, latitude, longitude, agentName, agentFaction
 	}
 }
 
+function savePortal(latitude, longitude, time, portalName, portalImageUrl) {
+	var oldPortal = localStorage.getItem(generatePortalId(latitude, longitude));
+	if (oldPortal && 'string' === typeof oldPortal && 0 < oldPortal.length) {
+		var portal = JSON.parse(oldPortal);
+		if (time < portal[0]) {
+			return false;
+		}
+	}
+	var newPortal = JSON.stringify([time, latitude, longitude, portalName, portalImageUrl]);
+	try {
+		localStorage.setItem(generatePortalId(latitude, longitude), newPortal);
+		return true;
+	} catch (e) { // QUOTA_EXCEEDED_ERR
+		// http://chrisberkhout.com/blog/localstorage-errors/
+		console.error({ func: 'savePortal', error: 'failed to setItem (first)', e: e, latitude: latitude, longitude: longitude, newPortal: newPortal });
+		showMessage('Removing old reports... (' + maxResults + ')');
+		removeOldReports(maxResults);
+		try {
+			localStorage.setItem(generatePortalId(latitude, longitude), newPortal);
+			return true;
+		} catch (e) {
+			console.error({ func: 'savePortal', error: 'failed to setItem (retry)', e: e, latitude: latitude, longitude: longitude, newPortal: newPortal });
+		}
+		return false;
+	}
+	return true;
+}
+
 function removeOldReports(count) {
-	var len = reportsLength();
-	count = min(count, len);
-	var keys = range(0, count).map(function(i) { return localStorage.key(i); }).filter(isReportId); 
+	var keys = range(0, min(count, reportsLength())).map(function(i) { return localStorage.key(i); }).filter(isReportId);
 	keys.forEach(function(k) {
 		var v = localStorage.getItem(k);
 		// console.log({ func: 'removeOldReports', k: k, v: (v ? v.length : v) });
@@ -348,7 +361,7 @@ function loadReport(reportId) {
 	if (jsonString && 'string' === typeof jsonString && 0 < jsonString.length) {
 		try {
 			var r = JSON.parse(jsonString);
-			return { reportId: r[0], time: r[1], latitude: r[2], longitude: r[3], agentName: r[4], agentFaction: r[5], agentLevel: r[6], ownerName: r[7], ownerFaction: r[8], enemyName: r[9], enemyFaction: r[10] };
+			return { time: r[0], reportId: r[1], latitude: r[2], longitude: r[3], agentName: r[4], agentFaction: r[5], agentLevel: r[6], ownerName: r[7], ownerFaction: r[8], enemyName: r[9], enemyFaction: r[10] };
 		} catch (e) {
 			console.error({ func: 'loadReport', error: 'falied to parse JSON', reportId: reportId, jsonString: jsonString });
 			return null;
@@ -364,7 +377,7 @@ function loadPortal(latitude, longitude) {
 	if (jsonString && 'string' === typeof jsonString && 0 < jsonString.length) {
 		try {
 			var r = JSON.parse(jsonString);
-			return { latitude: r[0], longitude: r[1], time: r[2], portalName: r[3], portalImageUrl: r[4] };
+			return { time: r[0], latitude: r[1], longitude: r[2], portalName: r[3], portalImageUrl: r[4] };
 		} catch (e) {
 			console.error({ func: 'loadPortal', error: 'falied to parse JSON', latitude: latitude, longitude: longitude, jsonString: jsonString });
 			return null;
@@ -381,7 +394,7 @@ function isExistReport(reportId) {
 }
 
 function generateReportId(gmailId, n) {
-	return gmailId + '/' + ('00' + n).substr(-2);
+	return 'a/' + gmailId + '/' + ('00' + n).substr(-2);
 }
 
 function generatePortalId(latitude, longitude) {
@@ -393,7 +406,7 @@ function generateConfigId(config) {
 }
 
 function isReportId(id) {
-	return id && 'string' === typeof id && !isPortalId(id) && !isConfigId(id);
+	return id && 'string' === typeof id && 0 == id.indexOf('a/');
 }
 
 function isPortalId(id) {
@@ -449,6 +462,9 @@ function escapeCSV(item) {
 	return esc.match(/[,\n"]/) ? '"' + esc + '"' : esc;
 }
 
+///
+/// analyzer
+///
 function analyzeReports(reports) {
 	var now = Date.now();
 	var statsPerPortalHourEnemy = mapReduce(reports, function(report) {
