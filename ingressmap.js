@@ -443,13 +443,16 @@ function printLocalStorage() {
 	}
 }
 
-function printPortals() {
+function printPortals(pattern) {
 	var portals = [];
 	for (var i = 0; i < localStorage.length; i++){
 		var k = localStorage.key(i);
 		if (isPortalId(k)) {
 			var v = JSON.parse(localStorage.getItem(k));
-			portals.push([v[0], v[1], decodeHTMLEntities(v[3])]);
+			var portalName = decodeHTMLEntities(v[3]);
+			if (!pattern || portalName.match(pattern)) {
+				portals.push([v[1], v[2], portalName]);
+			}
 		}
 	}
 	portals.forEach(function(portal) {
@@ -457,9 +460,29 @@ function printPortals() {
 	});
 }
 
+function printReports(pattern) {
+	var reports = [];
+	for (var i = 0; i < localStorage.length; i++){
+		var k = localStorage.key(i);
+		if (isReportId(k)) {
+			var v = localStorage.getItem(k);
+			if (!pattern || v.match(pattern)) {
+				reports.push(JSON.parse(v));
+			}
+		}
+	}
+	reports.forEach(function(portal) {
+		console.log(portal.map(escapeCSV).join(',') + ',');
+	});
+}
+
 function escapeCSV(item) {
-	var esc = item.replace(/"/g, '""');
-	return esc.match(/[,\n"]/) ? '"' + esc + '"' : esc;
+	if (item && 'string' === typeof item && 0 < item.length) {
+		var esc = item.replace(/"/g, '""');
+		return esc.match(/[,\n"]/) ? '"' + esc + '"' : esc;
+	} else {
+		return item;
+	}
 }
 
 ///
@@ -537,7 +560,8 @@ function parseBody(body) {
 
 	// http://stackoverflow.com/questions/15150264/jquery-how-to-stop-auto-load-imges-when-parsehtml
 	// replace <img src="..."> to <img no_load_src="..."> to stop auto load image 
-	body = body.replace(/<img src=/gi, '<img no_load_src=');
+	// body = body.replace(/<img src=/gi, '<img no_load_src=');
+	body = body.replace(/<img [^>]*src=['"]([^'"]+)[^>]*>/gi, function(match, capture) { return '<img no_load_src="' + capture + '" />'; }); // ignore other attributes
 	var div = $.parseHTML(body);
 	// console.log(div);
 
