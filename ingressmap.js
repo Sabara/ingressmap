@@ -448,10 +448,9 @@ function printPortals(pattern) {
 	for (var i = 0; i < localStorage.length; i++){
 		var k = localStorage.key(i);
 		if (isPortalId(k)) {
-			var v = JSON.parse(localStorage.getItem(k));
-			var portalName = decodeHTMLEntities(v[3]);
-			if (!pattern || portalName.match(pattern)) {
-				portals.push([v[1], v[2], portalName]);
+			var v = localStorage.getItem(k);
+			if (!pattern || v.match(pattern)) {
+				portals.push(JSON.parse(v));
 			}
 		}
 	}
