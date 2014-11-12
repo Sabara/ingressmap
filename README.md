@@ -1,6 +1,17 @@
 Ingress Damage Reports Map
 ==========================
 
+### What is this?
+
+A web page to show portals on Google Maps by analyzing Ingress Damage Report mails.
+
+This page can show portals that you have owned once (~= UPC), damage frequency by agents, hours and days. 
+
+http://ingress.xii.jp/
+
+Note: This site require Gmail authorization (OAuth 2.0), but this site won't store any of your email authorization/contents. All of the data are directly accessed between your web browser and Gmail servers. See source code for more detail :)
+
+
 ### 何ができるの？
 
 Google から送られてくる Ingress Damage Report メールを解析して地図上に表示する Web アプリケーションです。
@@ -12,11 +23,37 @@ http://ingress.xii.jp/
 なお、こちらのサーバには認証情報やメールの内容は一切送らずに、ユーザの Web ブラウザと Google のサーバ間でのみ情報をやりとりしますので安心して使えます(そのかわり大量のデータは処理しずらいですが)。
 
 
+### How to use
+
+Firstly, a dialog about using current position will pop-up. Press OK if you want to move to current position, or just cancel.
+
+Secondly, click a left top box "Please click here to authorize Gmail API (OAuth 2.0)" to authorize Gmail API. Google's authorization page will pop-up, then login by your Google account and accept permission to use Gmail API on this page.
+
+If authorization succeed, Ingress Damage Report email will load on this page. This process may take a few minutes for the first time. For the second+ time, process should speed up by using local cache.
+
+When email loading finished, it will show portals by colored icons.
+
+    Blue: portals got damaged.
+    Red: portals got damaged AND you have owned once (~= UPC).
+    Circle: portals got damaged over 24 hours ago.
+    Arrow: portals got damaged within 24 hours.
+
+If you click a portal icon, a infowindow will pop-up including damage frequency by agents, hours and days. `U` is unique users per hour, `#` is the number of damages. Agent names are anonymized for safety.
+
+Double circle icon on top right is current position button.
+
+For iOS users, you can see this page with full-screen mode by "Add to home screen" on Safari.
+
+If you want to cancel Gmail API authorization, access this page and revoke "Ingress Damage Reports Map".
+
+https://security.google.com/settings/security/permissions
+
+
 ### 使い方
 
 サイトを開くと、まず現在地を取得するかどうかを問うダイアログがでますので必要に応じて許可をしてください。許可しなくても利用可能です。
 
-次に Gmail API を使って Gmail 内のメールの内容を読み取るための OAuth 2.0 認証を行います(初回の起動時のみ)。Ingress を利用している Google アカウントでログインをして、さらに Gmail API をこの Web アプリケーションで利用するために承認してください。
+次に Gmail API を使って Gmail 内のメールの内容を読み取るための OAuth 2.0 認証を行います(初回の起動時のみ)。画面左上にある "Please click here to authorize Gmail API (OAuth 2.0)" というボックスをクリックすると Google の認証ページがポップ・アップします。Ingress を利用している Google アカウントでログインをして、さらに Gmail API をこの Web アプリケーションで利用するために承認してください。
 
 認証に成功すると Gmail のデータを取得しはじめますのでしばらく待ってください。初回起動時は大量のメールを通信しますので結構時間がかかります。2回目以降はキャッシュを使うのでそこそこ速くなります。
 
@@ -33,13 +70,30 @@ iOS の場合は Safari のメニューから「ホーム画面に追加」を�
 https://security.google.com/settings/security/permissions
 
 
+### Warning
+
+Follow Terms of Service, Agent Protocol, Community Guidelines and respect other agent's privacy. Don't post information about other agent's identity on public. And take care of your information too :)
+
+Ingress Terms of Service
+
+https://www.ingress.com/terms
+
+Agent Protocol
+
+https://support.google.com/ingress/answer/4625064
+
+Ingress Community Guidelines
+
+https://support.google.com/ingress/answer/2808360
+
+
 ### 注意
 
 Terms of Service、エージェントプロトコル、コミュニティガイドラインを守り、プレーヤーのプライバシーを尊重して利用してください。他のユーザーを特定する情報を公開しないようにしてください。また、自分の情報も間違って公開しないよう注意してください(表示されているポータルはあなたが訪れたことのあるポータルです)。
 
 Ingress Terms of Service
 
-https://www.ingress.com/terms?hl=ja
+https://www.ingress.com/terms
 
 エージェントプロトコル
 
@@ -48,6 +102,68 @@ https://support.google.com/ingress/answer/4625064?hl=ja
 Ingress コミュニティ ガイドライン
 
 https://support.google.com/ingress/answer/2808360?hl=ja
+
+
+### Tips
+
+Here are some useful JavaScript console functions.
+
+Print portals by CSV format. `pattern` is regexp (optional) 
+
+    printPortals([pattern])
+
+Print reports by CSV format. `pattern` is regexp (optional) 
+
+    printReports([pattern])
+
+Print local cache.
+
+    printLocalStorage()
+
+Clear all local cache. Clear cache and reload page may fix problem :P
+
+    localStorage.clear()
+
+Disabled anonymized agent name. Respect other agent's privacy and don't post information about other agent's identity on public.
+
+    function anonymize(str) { return str; }; clearAllPortals(); showAllPortals(); showStatus();
+
+
+### 小技
+
+JavaScript コンソールから使えるコマンドをいくつか用意してあります。JavaScript コンソールは Chrome であればメニューの "表示ー開発/管理ーJavaScriptコンソール" で表示出来ます。
+
+ポータル一覧をCSVで表示 `pattern` で正規表現により絞込可。省略すると全てのポータルを表示。
+
+    printPortals([pattern])
+
+レポート一覧をCSVで表示 `pattern` で正規表現により絞込可。省略すると全てのレポートを表示。
+
+    printReports([pattern])
+
+ローカルのキャッシュ全てを表示。
+
+    printLocalStorage()
+
+ローカルのキャッシュをクリア。動作がおかしくなったらキャッシュをクリアしてからブラウザをリロードしてみてください。
+
+    localStorage.clear()
+
+伏せ字にしてあるエージェント名を表示。エージェントのプライバシーを公開しないよう気をつけて利用してください。
+
+    function anonymize(str) { return str; }; clearAllPortals(); showAllPortals(); showStatus();
+
+
+### Source code
+
+Latest source code is here. License is GPL, feel free to fork and modify it!
+
+https://github.com/Sabara/ingressmap
+
+
+### For Developers
+
+TODO :)
 
 
 ### 開発者向け情報
@@ -63,6 +179,11 @@ Gmail API は Web Application として Client ID を発行し、Google Maps は
 HTML と JavaScript と CSS を自分のサイト上にコピーして HTML にアクセスすれば起動します。
 
 詳しくは、参考URLを見てください。
+
+
+### Ingress Damage Report Mail Format
+
+TODO :)
 
 
 ### Ingress Damage Report Mail のフォーマット
@@ -179,7 +300,7 @@ tr の二行目以降は以下のいずれかの情報が入っています。
 もし間違いや新しいフォーマットをみつけたら教えて下さい :)
 
 
-### 参考URL
+### Related URLs
 
 Google APIs Client Library for JavaScript (Beta)
 
@@ -198,9 +319,13 @@ Google Developers Console
 https://console.developers.google.com/
 
 
-### 作者
+### Author
 
 Sabara
+
+https://google.com/+SabaraSabara
+
+https://github.com/Sabara
 
 
 以上
