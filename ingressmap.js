@@ -156,7 +156,7 @@ function showPortal(stats) {
 	var damages = stats['damages'];
 
 	var portal = loadPortal(latitude, longitude);
-	var portalName = decodeHTMLEntities(portal['portalName']);
+	var portalName = portal['portalName'];
 	var portalImageUrl = portal['portalImageUrl'];
 
 	var intelUrl = 'https://www.ingress.com/intel?ll=' + latitude + ',' + longitude + '&pll=' + latitude + ',' + longitude + '&z=19';
@@ -557,11 +557,7 @@ function parseBody(body) {
 	var agentFaction = '';
 	var agentLevel = '';
 
-	// http://stackoverflow.com/questions/15150264/jquery-how-to-stop-auto-load-imges-when-parsehtml
-	// replace <img src="..."> to <img no_load_src="..."> to stop auto load image 
-	// body = body.replace(/<img src=/gi, '<img no_load_src=');
-	body = body.replace(/<img [^>]*src=['"]([^'"]+)[^>]*>/gi, function(match, capture) { return '<img no_load_src="' + capture + '" />'; }); // ignore other attributes
-	var div = $.parseHTML(body);
+	var div = parseHTML(body);
 	// console.log(div);
 
 	// table[width="750px"] > tbody > tr:eq(0) == header image (** Ingress - Begin Transmission **)
@@ -573,9 +569,9 @@ function parseBody(body) {
 			// <td valign="top" style="font-size: 13px; padding-bottom: 1.5em;"><span style="font-weight: normal; margin-right: .3em; font-size: 10px; text-transform: uppercase;">Agent Name:</span><span style="color: #3679B9;">agentNameX</span><br><span style="font-weight: normal; margin-right: .3em; font-size: 10px; text-transform: uppercase;">Faction:</span><span style="color: #3679B9;">Resistance</span><br><span style="font-weight: normal; margin-right: .3em; font-size: 10px; text-transform: uppercase;">Current Level:</span><span>L8</span></td>
 			var agentSpan = $('td > span:contains("Agent Name:") + span', tr);
 			if (parserDebug) { console.log([i, 'agent', agentSpan.length, $(tr).html()]); }
-			agentName = agentSpan.html();
-			agentFaction = spanToFaction(agentSpan);
-			agentLevel = $('td > span:contains("Level:") + span', tr).html();
+			agentName = checkAgentName(decodeHTMLEntities(agentSpan.html()));
+			agentFaction = checkAgentFaction(spanToFaction(agentSpan));
+			agentLevel = checkAgentLevel(decodeHTMLEntities($('td > span:contains("Level:") + span', tr).html()));
 			r['agentName'] = agentName;
 			r['agentFaction'] = agentFaction;
 			r['agentLevel'] = agentLevel;
@@ -596,14 +592,14 @@ function parseBody(body) {
 			if (0 != portal.length) {
 				if (parserDebug) { console.log([i, 'portal', portal.length, $(tr).html()]); }
 				// r['portalAddress'] = portal.html();
-				var intel_pat = /^http.*&pll=([\-\.\d]+?),([\-\.\d]+?)&z=\d+$/;
+				var intel_pat = /^https:\/\/www\.ingress\.com\/intel\?ll=[\-\.\d]+,[\-\.\d]+&pll=([\-\.\d]+?),([\-\.\d]+?)&z=\d+$/;
 				var m = intel_pat.exec(portal.attr('href'));
 				if (null != m) {
-					r['latitude'] = m[1]; r['longitude'] = m[2];
+					r['latitude'] = checkLatLng(m[1]); r['longitude'] = checkLatLng(m[2]);
 				} else {
 					console.error({ func: 'parseBody', error: 'Unknown format (intel)', href: portal.attr('href'), i: i, tr: $(tr).html() });
 				}
-				r['portalName'] = $('td > div:eq(0)', tr).html();
+				r['portalName'] = checkPortalName(decodeHTMLEntities($('td > div:eq(0)', tr).html()));
 				return;
 			}
 
@@ -611,10 +607,10 @@ function parseBody(body) {
 			var image = $('td > div[style="width:1000px;"] > div[style*="height: 160px"] > img', tr);
 			if (2 == image.length) {
 				if (parserDebug) { console.log([i, 'image', image.length, $(tr).html()]); }
-				var img_pat = /^http(s)?:\/\//;
+				var img_pat = /^https?:\/\//;
 				var m = img_pat.exec($(image[0]).attr('no_load_src'));
 				if (null != m) {
-					r['portalImageUrl'] = $(image[0]).attr('no_load_src');
+					r['portalImageUrl'] = checkPortalImageUrl($(image[0]).attr('no_load_src'));
 					// r['mapImageUrl'] = $(image[1]).attr('no_load_src');
 				} else {
 					console.error({ func: 'parseBody', error: 'Unknown format (image url)', img: $(image[0]).attr('no_load_src'), i: i, tr: $(tr).html() });
@@ -659,7 +655,7 @@ function parseBody(body) {
 					var m = dmg_pat.exec(line);
 					if (null != m) {
 						targets.push(m[1]);
-						var enemySpan = $($.parseHTML(m[2]));
+						var enemySpan = $(parseHTML(m[2]));
 						enemies.push([enemySpan.html(), spanToFaction(enemySpan)]);
 						dates.push(m[3]);
 					} else {
@@ -669,17 +665,17 @@ function parseBody(body) {
 						// ...
 					}
 				});
-				r['enemyName'] = enemies[0][0]; // FIXME: first only??
-				r['enemyFaction'] = enemies[0][1]; // FIXME: first only??
+				r['enemyName'] = checkAgentName(enemies[0][0]); // FIXME: first only??
+				r['enemyFaction'] = checkAgentFaction(enemies[0][1]); // FIXME: first only??
 
 				// STATUS:<br>Level 1<br>Health: 0%<br>Owner: [uncaptured]
 				var status = $('td > table[width="700px"] > tbody > tr > td > div:contains("STATUS:")', tr);
 				var status_pat = /^STATUS:<br>Level (.*)<br>Health: (.*)<br>Owner: (.*)$/;
 				var m = status_pat.exec(status.html());
 				if (null != m) {
-					var ownerSpan = $($.parseHTML(m[3]));
-					r['ownerName'] = ownerSpan.html() ? ownerSpan.html() : ownerSpan.text();
-					r['ownerFaction'] = spanToFaction(ownerSpan);
+					var ownerSpan = $(parseHTML(m[3]));
+					r['ownerName'] = checkAgentName(ownerSpan.html() ? ownerSpan.html() : ownerSpan.text());
+					r['ownerFaction'] = checkAgentFaction(spanToFaction(ownerSpan));
 				} else {
 					console.error({ func: 'parseBody', error: 'Unknown format (status)', status: status.html(), i: i, tr: $(tr).html() });
 				}
@@ -698,6 +694,72 @@ function parseBody(body) {
 
 	if (parserDebug) { console.log(['parseBody', result.length, result]); }
 	return result;
+}
+
+function parseHTML(html) {
+	// http://stackoverflow.com/questions/15150264/jquery-how-to-stop-auto-load-imges-when-parsehtml
+	// replace <img src="..."> to <img no_load_src="..."> to stop auto load image 
+	html = html.replace(/<img [^>]*src=['"]([^'"]+)[^>]*>/gi, function(match, capture) { return '<img no_load_src="' + capture + '" />'; }); // ignore other attributes
+	return $.parseHTML(html);
+}
+
+function checkAgentName(agentName) {
+	if ('[uncaptured]' == agentName || agentName.match(/^[\w\d_]+$/)) {
+		return agentName;
+	} else {
+		console.error({ func: 'checkAgentName', error: 'Unknown format (agent name)', agentName: agentName });
+		return '__UNKNOWN__';
+	}
+}
+
+function checkAgentFaction(agentFaction) {
+	if (['RES', 'ENL', ''].some(function(item) { return item == agentFaction; })) {
+		return agentFaction;
+	} else {
+		console.error({ func: 'checkAgentFaction', error: 'Unknown format (agent faction)', agentFaction: agentFaction });
+		return '__UNKNOWN__';
+	}
+}
+
+function checkAgentLevel(agentLevel) {
+	if (agentLevel.match(/^L\d+$/)) {
+		return agentLevel;
+	} else {
+		console.error({ func: 'checkAgentLevel', error: 'Unknown format (agent level)', agentLevel: agentLevel });
+		return '__UNKNOWN__';
+	}
+}
+
+function checkLatLng(latlng) {
+	if (latlng.match(/^[\-\.\d]+$/)) {
+		return latlng;
+	} else {
+		console.error({ func: 'checkLatLng', error: 'Unknown format (latlng)', latlng: latlng });
+		return '__UNKNOWN__';
+	}
+}
+
+function checkPortalName(portalName) {
+	if (portalName.match(/(<script)|(<img)|(<a )|(javascript:)|(http:)|(https:)/ig)) { // TODO: need more check?
+		console.error({ func: 'checkPortalName', error: 'Unknown format (portal name)', portalName: portalName });
+		return '__UNKNOWN__';
+	} else {
+		return portalName;
+	}
+}
+
+function checkPortalImageUrl(portaImageUrl) {
+	// http://lh3.ggpht.com/TnshEYjvqAJfcdlAOmUxmdL5mwElFM2siysybBgmYKKrkJvjznPrqLHN4lgXQ8NonzaM1yNJYW3DvioYyaMU
+	// http://www.panoramio.com/photos/small/16316863.jpg
+	if (portaImageUrl.match(/^http:\/\/lh\d+\.ggpht\.com\/[\w\d\-\_]+$/)) {
+		return portaImageUrl;
+	} else if (portaImageUrl.match(/^http:\/\/www\.panoramio\.com\/photos\/small\/[\d]+\.jpg$/)) {
+		return portaImageUrl;
+	} else {
+		console.error({ func: 'checkPortalImageUrl', error: 'Unknown format (portal image url)', portalImageUrl: portaImageUrl });
+		// return '__UNKNOWN__';
+		return portaImageUrl;
+	}
 }
 
 function toWeekDay(day) {
