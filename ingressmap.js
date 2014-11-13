@@ -156,6 +156,7 @@ function showPortal(stats) {
 	var damages = stats['damages'];
 
 	var portal = loadPortal(latitude, longitude);
+	if (null == portal) { return; }
 	var portalName = portal['portalName'];
 	var portalImageUrl = portal['portalImageUrl'];
 
@@ -680,7 +681,11 @@ function parseBody(body) {
 					console.error({ func: 'parseBody', error: 'Unknown format (status)', status: status.html(), i: i, tr: $(tr).html() });
 				}
 
-				result.push(r);
+				if (r['agentName'] && r['agentFaction'] && r['agentLevel'] && r['latitude'] && r['longitude'] && r['portalName'] && r['portalImageUrl'] && r['enemyName'] && r['enemyFaction'] && r['ownerName'] && r['ownerFaction'] != undefined) {
+					result.push(r);
+				} else {
+					console.error({ func: 'parseBody', error: 'Invalid value', r: r });
+				}
 				r = {};
 				r['agentName'] = agentName;
 				r['agentFaction'] = agentFaction;
