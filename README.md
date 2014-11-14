@@ -3,7 +3,7 @@ Ingress Damage Reports Map
 
 ### What is this?
 
-A web page to show portals on Google Maps by analyzing Ingress Damage Report mails.
+A web application to show portals on Google Maps by analyzing Ingress Damage Report mails.
 
 This page can show portals that you have owned once (~= UPC), damage frequency by agents, hours and days. 
 
@@ -24,6 +24,8 @@ http://ingress.xii.jp/
 
 
 ### How to use
+
+Before opening this site, you have to enable to receive Ingress Damage Report mail. Confirm Ingress scanner settings "OPT" - "DEVICE" - "Email" - "Game notifications(Portal under attack, etc)" is checked. Then open http://ingress.xii.jp/ on web browser.
 
 Firstly, a dialog about using current position will pop-up. Press OK if you want to move to current position, or just cancel.
 
@@ -50,6 +52,8 @@ https://security.google.com/settings/security/permissions
 
 
 ### 使い方
+
+Ingress のスキャナの設定で OPT - DEVICE - Email - Game notifications(Portal under attack, etc). のチェックボックスを有効にしてダメージレポートメールを受け取るようにしておいてください。なお、この Web アプリケーションは Gmail にしか対応していないので Ingress のアカウントのメールアドレスを Gmail 以外にしている場合は Gmail にメールを転送する等の設定をしておいてください。
 
 サイトを開くと、まず現在地を取得するかどうかを問うダイアログがでますので必要に応じて許可をしてください。許可しなくても利用可能です。
 
@@ -124,7 +128,7 @@ Clear all local cache. Clear cache and reload page may fix problem :P
 
     localStorage.clear()
 
-Disabled anonymized agent name. Respect other agent's privacy and don't post information about other agent's identity on public.
+Disable anonymized agent name. Respect other agent's privacy and don't post information about other agent's identity on public.
 
     function anonymize(str) { return str; }; clearAllPortals(); showAllPortals(); showStatus();
 
@@ -152,6 +156,10 @@ JavaScript コンソールから使えるコマンドをいくつか用意して
 伏せ字にしてあるエージェント名を表示。エージェントのプライバシーを公開しないよう気をつけて利用してください。
 
     function anonymize(str) { return str; }; clearAllPortals(); showAllPortals(); showStatus();
+
+ダメージレポートメールを受信トレイにいれない(自動でアーカイブする)ための Gmail フィルタ設定方法は以下のページを参照してください。このフィルタを入れるとダメージレポートメールが届いても通知が来なくなります。
+
+https://plus.google.com/+SabaraSabara/posts/iuRTVdpPfBr
 
 
 ### Source code
