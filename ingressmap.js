@@ -349,7 +349,7 @@ function savePortal(latitude, longitude, time, portalName, portalImageUrl) {
 }
 
 function removeOldReports(count) {
-	var keys = range(0, min(count, reportsLength())).map(function(i) { return localStorage.key(i); }).filter(isReportId);
+	var keys = range(0, Math.min(count, reportsLength())).map(function(i) { return localStorage.key(i); }).filter(isReportId);
 	keys.forEach(function(k) {
 		var v = localStorage.getItem(k);
 		// console.log({ func: 'removeOldReports', k: k, v: (v ? v.length : v) });
